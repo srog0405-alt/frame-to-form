@@ -145,6 +145,56 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
 
+    /* RESULTS */
+    .results {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+    .result-item {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .result-item .label {
+      color: #94a3b8;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+    .result-item .status-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .result-item .status-badge.processing {
+      background: #fbbf24;
+      color: #0f172a;
+    }
+    .result-item .status-badge.done {
+      background: #4ade80;
+      color: #0f172a;
+    }
+    .result-item .status-badge.failed {
+      background: #ef4444;
+      color: white;
+    }
+    .result-item .result-link {
+      display: inline-block;
+      margin-top: 8px;
+      color: #64b5f6;
+      text-decoration: none;
+      font-size: 13px;
+    }
+    .result-item .result-link:hover {
+      text-decoration: underline;
+    }
+
     .divider { border: none; border-top: 1px solid #334155; margin: 20px 0; }
     .hidden { display: none; }
     .keys-saved { color: #4ade80; font-size: 13px; margin-left: 10px; }
@@ -217,22 +267,23 @@
       <div id="gallerySection" class="hidden">
         <hr class="divider">
         <span class="step-badge">Step 2</span>
-        <h2>Review and pick one</h2>
-        <p class="sub">Click the image you want to take through to 3D.</p>
+        <h2>Review and select variations</h2>
+        <p class="sub">Click images to select them. You can choose multiple to convert all of them to 3D.</p>
         <div class="gallery" id="gallery"></div>
+        <div style="margin-top: 20px;">
+          <button class="btn" id="proceedBtn" onclick="proceedToConvert()" disabled>Convert <span id="selectedCount">0</span> selected to 3D</button>
+        </div>
       </div>
     </div>
 
-    <!-- STEP 3: REMOVE BACKGROUND -->
+    <!-- STEP 3: REMOVE BACKGROUND (Optional) -->
     <div class="card hidden" id="bgCard">
       <span class="step-badge">Step 3 &middot; optional</span>
       <h2>Remove background</h2>
-      <p class="sub">A clean cut-out gives the 3D conversion a much better result. You can skip this if your image already has a plain background.</p>
-      <div class="preview-wrap">
-        <div class="preview-box"><img id="bgPreview" alt="Selected image"></div>
-      </div>
-      <div style="margin-top:16px;">
-        <button class="btn" id="removeBgBtn" onclick="removeBackground()">Remove background</button>
+      <p class="sub">A clean cut-out gives the 3D conversion a much better result. You can skip this if your images already have a plain background.</p>
+      <p class="sub" style="color: #fbbf24;"><strong>Note:</strong> Background removal will apply to the currently selected images. This affects all conversions below.</p>
+      <div style="margin-top: 16px;">
+        <button class="btn" id="removeBgBtn" onclick="removeBackgroundBatch()">Remove background from selected</button>
         <button class="btn btn-secondary" onclick="skipBg()">Skip this step</button>
       </div>
       <div class="status" id="bgStatus"></div>
@@ -242,25 +293,26 @@
     <div class="card hidden" id="convertCard">
       <span class="step-badge">Step 4</span>
       <h2>Convert to 3D</h2>
-      <p class="sub">Sends your image to Trellis-2 and returns a production-ready GLB file. This usually takes 1&ndash;3 minutes.</p>
-      <div class="preview-wrap">
-        <div class="preview-box"><img id="convertPreview" alt="Image to convert"></div>
-      </div>
-      <div style="margin-top:16px;">
-        <button class="btn" id="convertBtn" onclick="convertTo3D()">Convert to 3D</button>
+      <p class="sub">Sends your images to Trellis-2 and returns production-ready GLB files. Each conversion usually takes 1–3 minutes.</p>
+      <div style="margin-top: 16px;">
+        <button class="btn" id="convertBtn" onclick="convertSelectedTo3D()">Convert all selected to 3D</button>
       </div>
       <div class="status" id="convertStatus"></div>
-      <div id="downloadSection" class="hidden" style="margin-top:16px;">
-        <button class="btn" onclick="downloadGLB()">&#11015; Download GLB</button>
+
+      <!-- RESULTS -->
+      <div id="resultsSection" class="hidden" style="margin-top: 20px;">
+        <hr class="divider">
+        <h3 style="color: #64b5f6; margin-top: 0;">Conversions</h3>
+        <div class="results" id="resultsList"></div>
       </div>
     </div>
   </div>
 
   <script>
     // ---------- STATE ----------
-    var selectedImageUrl = null;    // URL of chosen generated image (fal CDN)
-    var selectedImageBase64 = null; // base64 data URL (uploads / bg-removed)
-    var glbUrl = null;
+    var generatedImages = [];  // Array of {url, base64}
+    var selectedIndices = new Set(); // Selected image indices
+    var conversions = {};      // {index: {status, taskId, resultUrl}}
 
     // ---------- KEYS ----------
     function loadKeys() {
@@ -307,13 +359,15 @@
       document.getElementById('generateBtn').disabled = true;
       busy('genStatus', 'Generating ' + count + ' variations&hellip;');
 
+      generatedImages = [];
+      selectedIndices.clear();
+
       var done = 0, failed = 0;
 
       for (var i = 0; i < count; i++) {
         (function(index) {
           var tile = document.createElement('div');
           tile.className = 'tile loading';
-          tile.textContent = 'Generating ' + (index + 1) + '&hellip;';
           tile.innerHTML = 'Generating ' + (index + 1) + '&hellip;';
           gallery.appendChild(tile);
 
@@ -325,9 +379,10 @@
           .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
           .then(function(res) {
             if (!res.ok || !res.data.image_url) throw new Error(res.data.error || 'Generation failed');
+            generatedImages[index] = { url: res.data.image_url, base64: null };
             tile.className = 'tile';
             tile.innerHTML = '<img src="' + res.data.image_url + '" alt="Variation ' + (index + 1) + '"><div class="tick">&#10003;</div>';
-            tile.onclick = function() { selectImage(tile, res.data.image_url, null); };
+            tile.onclick = function() { toggleImageSelection(tile, index); };
           })
           .catch(function(err) {
             failed++;
@@ -339,8 +394,8 @@
             if (done === count) {
               document.getElementById('generateBtn').disabled = false;
               if (failed === count) setStatus('genStatus', 'All generations failed. Check your fal.ai key and try again.', 'error');
-              else if (failed > 0) setStatus('genStatus', (count - failed) + ' of ' + count + ' generated. Click one to continue.', 'ok');
-              else setStatus('genStatus', 'Done. Click the image you want to continue with.', 'ok');
+              else if (failed > 0) setStatus('genStatus', (count - failed) + ' of ' + count + ' generated. Click to select.', 'ok');
+              else setStatus('genStatus', 'Done. Select the images you want to convert to 3D.', 'ok');
             }
           });
         })(i);
@@ -355,147 +410,191 @@
       reader.onload = function() {
         var gallery = document.getElementById('gallery');
         document.getElementById('gallerySection').classList.remove('hidden');
+        var index = generatedImages.length;
+        generatedImages.push({ url: null, base64: reader.result });
+
         var tile = document.createElement('div');
         tile.className = 'tile';
         tile.innerHTML = '<img src="' + reader.result + '" alt="Uploaded image"><div class="tick">&#10003;</div>';
-        tile.onclick = function() { selectImage(tile, null, reader.result); };
+        tile.onclick = function() { toggleImageSelection(tile, index); };
         gallery.appendChild(tile);
-        setStatus('genStatus', 'Image uploaded. Click it to continue.', 'ok');
-        tile.click();
+        setStatus('genStatus', 'Image uploaded. Select it and continue.', 'ok');
       };
       reader.readAsDataURL(file);
       e.target.value = '';
     }
 
-    // ---------- STEP 2: SELECT ----------
-    function selectImage(tile, url, base64) {
-      var tiles = document.querySelectorAll('.gallery .tile');
-      for (var i = 0; i < tiles.length; i++) tiles[i].classList.remove('selected');
-      tile.classList.add('selected');
+    // ---------- STEP 2: MULTI-SELECT ----------
+    function toggleImageSelection(tile, index) {
+      if (selectedIndices.has(index)) {
+        selectedIndices.delete(index);
+        tile.classList.remove('selected');
+      } else {
+        selectedIndices.add(index);
+        tile.classList.add('selected');
+      }
+      updateSelectedCount();
+    }
 
-      selectedImageUrl = url;
-      selectedImageBase64 = base64;
-      glbUrl = null;
-      document.getElementById('downloadSection').classList.add('hidden');
-      setStatus('convertStatus', '');
-      setStatus('bgStatus', '');
+    function updateSelectedCount() {
+      var count = selectedIndices.size;
+      document.getElementById('selectedCount').textContent = count;
+      document.getElementById('proceedBtn').disabled = count === 0;
+    }
 
-      var src = base64 || url;
-      document.getElementById('bgPreview').src = src;
-      document.getElementById('convertPreview').src = src;
+    // ---------- STEP 3: REMOVE BACKGROUND (BATCH) ----------
+    function proceedToConvert() {
+      if (selectedIndices.size === 0) return;
       document.getElementById('bgCard').classList.remove('hidden');
       document.getElementById('convertCard').classList.remove('hidden');
       document.getElementById('bgCard').scrollIntoView({ behavior: 'smooth' });
     }
 
-    // ---------- STEP 3: REMOVE BACKGROUND ----------
     function skipBg() {
       document.getElementById('convertCard').scrollIntoView({ behavior: 'smooth' });
     }
 
-    function removeBackground() {
+    function removeBackgroundBatch() {
       if (!rbgKey()) { setStatus('bgStatus', 'Add your Remove.bg key at the top of the page first.', 'error'); return; }
+      if (selectedIndices.size === 0) { setStatus('bgStatus', 'No images selected.', 'error'); return; }
+
       document.getElementById('removeBgBtn').disabled = true;
-      busy('bgStatus', 'Removing background&hellip;');
+      busy('bgStatus', 'Removing background from ' + selectedIndices.size + ' image(s)&hellip;');
 
-      var getBlob;
-      if (selectedImageBase64) {
-        getBlob = fetch(selectedImageBase64).then(function(r) { return r.blob(); });
-      } else {
-        getBlob = fetch(selectedImageUrl).then(function(r) {
-          if (!r.ok) throw new Error('Could not fetch the image');
-          return r.blob();
-        });
-      }
+      var count = selectedIndices.size;
+      var done = 0;
+      var failed = 0;
 
-      getBlob
-        .then(function(blob) {
-          var fd = new FormData();
-          fd.append('image', blob, 'image.png');
-          return fetch('/api/remove-bg', { method: 'POST', headers: { 'x-removebg-key': rbgKey() }, body: fd });
-        })
-        .then(function(r) {
-          if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Remove.bg failed'); });
-          return r.blob();
-        })
-        .then(function(blob) {
-          var reader = new FileReader();
-          reader.onload = function() {
-            selectedImageBase64 = reader.result;
-            selectedImageUrl = null; // the cut-out replaces the original
-            document.getElementById('bgPreview').src = reader.result;
-            document.getElementById('convertPreview').src = reader.result;
-            setStatus('bgStatus', 'Background removed. Continue to 3D conversion below.', 'ok');
-            document.getElementById('removeBgBtn').disabled = false;
-          };
-          reader.readAsDataURL(blob);
-        })
-        .catch(function(err) {
-          setStatus('bgStatus', err.message, 'error');
-          document.getElementById('removeBgBtn').disabled = false;
-        });
-    }
+      selectedIndices.forEach(function(index) {
+        var img = generatedImages[index];
+        var getBlob;
+        if (img.base64) {
+          getBlob = fetch(img.base64).then(function(r) { return r.blob(); });
+        } else {
+          getBlob = fetch(img.url).then(function(r) {
+            if (!r.ok) throw new Error('Could not fetch the image');
+            return r.blob();
+          });
+        }
 
-    // ---------- STEP 4: CONVERT TO 3D ----------
-    function convertTo3D() {
-      if (!falKey()) { setStatus('convertStatus', 'Add your fal.ai key at the top of the page first.', 'error'); return; }
-      if (!selectedImageUrl && !selectedImageBase64) { setStatus('convertStatus', 'Pick an image first.', 'error'); return; }
-
-      document.getElementById('convertBtn').disabled = true;
-      document.getElementById('downloadSection').classList.add('hidden');
-      busy('convertStatus', 'Submitting to Trellis-2&hellip;');
-
-      var body = selectedImageBase64 ? { image_base64: selectedImageBase64 } : { image_url: selectedImageUrl };
-
-      fetch('/api/trellis/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-fal-key': falKey() },
-        body: JSON.stringify(body)
-      })
-      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
-      .then(function(res) {
-        if (!res.ok || !res.data.task_id) throw new Error(res.data.error || 'Could not start conversion');
-        busy('convertStatus', 'Converting&hellip; this usually takes 1&ndash;3 minutes.');
-        pollTrellis(res.data.task_id, 0);
-      })
-      .catch(function(err) {
-        setStatus('convertStatus', err.message, 'error');
-        document.getElementById('convertBtn').disabled = false;
+        getBlob
+          .then(function(blob) {
+            var fd = new FormData();
+            fd.append('image', blob, 'image.png');
+            return fetch('/api/remove-bg', { method: 'POST', headers: { 'x-removebg-key': rbgKey() }, body: fd });
+          })
+          .then(function(r) {
+            if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Remove.bg failed'); });
+            return r.blob();
+          })
+          .then(function(blob) {
+            var reader = new FileReader();
+            reader.onload = function() {
+              generatedImages[index].base64 = reader.result;
+              generatedImages[index].url = null;
+            };
+            reader.readAsDataURL(blob);
+          })
+          .catch(function(err) {
+            failed++;
+            console.error('BG removal failed for image ' + index + ':', err);
+          })
+          .then(function() {
+            done++;
+            if (done === count) {
+              document.getElementById('removeBgBtn').disabled = false;
+              if (failed === count) setStatus('bgStatus', 'All failed. Check your Remove.bg key.', 'error');
+              else if (failed > 0) setStatus('bgStatus', (count - failed) + ' of ' + count + ' processed. Continue below.', 'ok');
+              else setStatus('bgStatus', 'All backgrounds removed. Continue below.', 'ok');
+            }
+          });
       });
     }
 
-    function pollTrellis(taskId, attempts) {
-      if (attempts > 120) { // ~10 minutes at 5s intervals
-        setStatus('convertStatus', 'Timed out waiting for the conversion. Try again.', 'error');
-        document.getElementById('convertBtn').disabled = false;
+    // ---------- STEP 4: CONVERT BATCH TO 3D ----------
+    function convertSelectedTo3D() {
+      if (!falKey()) { setStatus('convertStatus', 'Add your fal.ai key at the top of the page first.', 'error'); return; }
+      if (selectedIndices.size === 0) { setStatus('convertStatus', 'No images selected.', 'error'); return; }
+
+      document.getElementById('convertBtn').disabled = true;
+      var count = selectedIndices.size;
+      busy('convertStatus', 'Submitting ' + count + ' image(s) to Trellis-2&hellip;');
+      document.getElementById('resultsSection').classList.remove('hidden');
+
+      conversions = {};
+      var resultsList = document.getElementById('resultsList');
+      resultsList.innerHTML = '';
+
+      var submitted = 0;
+
+      selectedIndices.forEach(function(index) {
+        var img = generatedImages[index];
+        var body = img.base64 ? { image_base64: img.base64 } : { image_url: img.url };
+
+        conversions[index] = { status: 'submitting', taskId: null, resultUrl: null };
+
+        // Create result item
+        var item = document.createElement('div');
+        item.className = 'result-item';
+        item.id = 'result-' + index;
+        item.innerHTML = '<div class="label">Image ' + (index + 1) + '</div><div class="status-badge processing">Submitting...</div>';
+        resultsList.appendChild(item);
+
+        fetch('/api/trellis/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-fal-key': falKey() },
+          body: JSON.stringify(body)
+        })
+        .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+        .then(function(res) {
+          if (!res.ok || !res.data.task_id) throw new Error(res.data.error || 'Could not start conversion');
+          conversions[index].taskId = res.data.task_id;
+          conversions[index].status = 'processing';
+          item.innerHTML = '<div class="label">Image ' + (index + 1) + '</div><div class="status-badge processing">Processing...</div>';
+          pollTrellis(index, 0);
+        })
+        .catch(function(err) {
+          conversions[index].status = 'failed';
+          item.innerHTML = '<div class="label">Image ' + (index + 1) + '</div><div class="status-badge failed">Failed: ' + err.message + '</div>';
+          document.getElementById('convertBtn').disabled = false;
+        })
+        .then(function() {
+          submitted++;
+          if (submitted === count) {
+            setStatus('convertStatus', 'Converting ' + count + ' image(s). This usually takes 1–3 minutes each.', 'ok');
+          }
+        });
+      });
+    }
+
+    function pollTrellis(index, attempts) {
+      if (attempts > 120) {
+        conversions[index].status = 'failed';
+        var item = document.getElementById('result-' + index);
+        item.innerHTML = '<div class="label">Image ' + (index + 1) + '</div><div class="status-badge failed">Timeout</div>';
         return;
       }
       setTimeout(function() {
-        fetch('/api/trellis/status/' + taskId, { headers: { 'x-fal-key': falKey() } })
+        fetch('/api/trellis/status/' + conversions[index].taskId, { headers: { 'x-fal-key': falKey() } })
           .then(function(r) { return r.json(); })
           .then(function(data) {
+            var item = document.getElementById('result-' + index);
             if (data.status === 'FINISHED' && data.result_url) {
-              glbUrl = data.result_url;
-              setStatus('convertStatus', 'Conversion complete.', 'ok');
-              document.getElementById('downloadSection').classList.remove('hidden');
+              conversions[index].status = 'done';
+              conversions[index].resultUrl = data.result_url;
+              item.innerHTML = '<div class="label">Image ' + (index + 1) + '</div><div class="status-badge done">Done &#10003;</div><a href="' + data.result_url + '" class="result-link" download>&#11015; Download GLB</a>';
               document.getElementById('convertBtn').disabled = false;
             } else if (data.status === 'FAILED') {
-              setStatus('convertStatus', 'Conversion failed: ' + (data.error || 'unknown error'), 'error');
+              conversions[index].status = 'failed';
+              item.innerHTML = '<div class="label">Image ' + (index + 1) + '</div><div class="status-badge failed">Failed</div>';
               document.getElementById('convertBtn').disabled = false;
             } else {
-              pollTrellis(taskId, attempts + 1);
+              pollTrellis(index, attempts + 1);
             }
           })
-          .catch(function() { pollTrellis(taskId, attempts + 1); });
+          .catch(function() { pollTrellis(index, attempts + 1); });
       }, 5000);
-    }
-
-    function downloadGLB() {
-      if (!glbUrl) return;
-      var filename = 'frame-to-form-' + Date.now() + '.glb';
-      window.location.href = glbUrl;
     }
   </script>
 </body>
 </html>
-
