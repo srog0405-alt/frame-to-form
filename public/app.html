@@ -4,12 +4,30 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Frame to Form - App</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Oswald:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --bg: #0a0a09;
+      --panel: #151412;
+      --panel-2: #0f0e0c;
+      --line: #2b2721;
+      --gold: #c9a876;
+      --gold-hi: #e2c493;
+      --cream: #ece5d8;
+      --text: #cfc8ba;
+      --muted: #8f877a;
+      --green: #5ad178;
+      --red: #e0604c;
+      --amber: #d9b04c;
+    }
     * { box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
+      background: var(--bg);
+      color: var(--text);
       margin: 0;
       padding: 20px;
     }
@@ -21,57 +39,101 @@
       justify-content: space-between;
       align-items: center;
       padding: 15px 0;
-      border-bottom: 1px solid #334155;
+      border-bottom: 1px solid var(--line);
       margin-bottom: 30px;
     }
-    .logo { color: #64b5f6; font-size: 22px; font-weight: bold; text-decoration: none; }
-    .nav-right { display: flex; align-items: center; gap: 20px; }
-    .nav-right a { color: #94a3b8; text-decoration: none; }
-    .nav-right a:hover { color: #e2e8f0; }
-    .logout-btn {
-      background: #ef4444; color: white; border: none;
-      padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px;
+    .logo {
+      display: flex; align-items: center; gap: 12px;
+      font-family: 'IBM Plex Mono', monospace;
+      color: var(--gold);
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 3px;
+      text-decoration: none;
+      text-transform: uppercase;
     }
-    .logout-btn:hover { background: #dc2626; }
+    .logo svg { height: 26px; width: auto; display: block; }
+    .logo .tagline {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 2px;
+      font-weight: 400;
+      text-transform: lowercase;
+    }
+    .nav-right { display: flex; align-items: center; gap: 20px; }
+    .nav-right a {
+      font-family: 'IBM Plex Mono', monospace;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+    .nav-right a:hover { color: var(--gold); }
+    .logout-btn {
+      font-family: 'IBM Plex Mono', monospace;
+      background: transparent; color: var(--red);
+      border: 1px solid var(--red);
+      padding: 7px 14px; border-radius: 4px; cursor: pointer;
+      font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase;
+    }
+    .logout-btn:hover { background: rgba(224, 96, 76, 0.12); }
 
     /* CARDS */
     .card {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 8px;
-      padding: 24px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 26px;
       margin-bottom: 24px;
     }
-    .card h2 { color: #64b5f6; margin: 0 0 6px 0; font-size: 18px; }
-    .card .sub { color: #94a3b8; font-size: 14px; margin: 0 0 18px 0; }
+    .card h2 {
+      font-family: 'Oswald', 'Arial Narrow', sans-serif;
+      color: var(--cream);
+      margin: 0 0 6px 0;
+      font-size: 22px;
+      font-weight: 500;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .card .sub { color: var(--muted); font-size: 14px; margin: 0 0 18px 0; }
 
     /* STEP BADGES */
     .step-badge {
       display: inline-block;
-      background: #0f172a;
-      border: 1px solid #334155;
-      color: #64b5f6;
-      border-radius: 999px;
-      font-size: 12px;
+      font-family: 'IBM Plex Mono', monospace;
+      background: var(--panel-2);
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      border-radius: 3px;
+      font-size: 11px;
       padding: 3px 10px;
-      margin-bottom: 10px;
-      letter-spacing: 1px;
+      margin-bottom: 12px;
+      letter-spacing: 2px;
       text-transform: uppercase;
     }
 
     /* INPUTS */
-    label { display: block; color: #94a3b8; font-size: 13px; margin-bottom: 6px; }
+    label {
+      display: block;
+      font-family: 'IBM Plex Mono', monospace;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 7px;
+    }
     input[type="text"], input[type="password"], textarea, select {
       width: 100%;
-      background: #0f172a;
-      border: 1px solid #334155;
-      border-radius: 6px;
-      color: #e2e8f0;
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      color: var(--cream);
       padding: 10px 12px;
       font-size: 14px;
       font-family: inherit;
     }
-    input:focus, textarea:focus, select:focus { outline: 2px solid #64b5f6; outline-offset: 0; }
+    input:focus, textarea:focus, select:focus { outline: 2px solid var(--gold); outline-offset: 0; }
     textarea { resize: vertical; min-height: 80px; }
     .row { display: flex; gap: 16px; flex-wrap: wrap; }
     .row > div { flex: 1; min-width: 220px; }
@@ -79,18 +141,20 @@
 
     /* BUTTONS */
     .btn {
-      background: #64b5f6; color: #0f172a; border: none;
-      padding: 10px 20px; border-radius: 6px; cursor: pointer;
-      font-size: 14px; font-weight: 600;
+      font-family: 'IBM Plex Mono', monospace;
+      background: var(--gold); color: #12100d; border: 1px solid var(--gold);
+      padding: 11px 22px; border-radius: 4px; cursor: pointer;
+      font-size: 13px; font-weight: 600;
+      letter-spacing: 2px; text-transform: uppercase;
     }
-    .btn:hover { background: #90caf9; }
-    .btn:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+    .btn:hover { background: var(--gold-hi); border-color: var(--gold-hi); }
+    .btn:disabled { background: var(--line); border-color: var(--line); color: var(--muted); cursor: not-allowed; }
     .btn-secondary {
-      background: transparent; color: #64b5f6;
-      border: 1px solid #64b5f6;
+      background: transparent; color: var(--gold);
+      border: 1px solid var(--gold);
     }
-    .btn-secondary:hover { background: rgba(100, 181, 246, 0.1); }
-    .btn-secondary:disabled { border-color: #334155; color: #64748b; background: transparent; }
+    .btn-secondary:hover { background: rgba(201, 168, 118, 0.1); }
+    .btn-secondary:disabled { border-color: var(--line); color: var(--muted); background: transparent; }
 
     /* GALLERY */
     .gallery {
@@ -101,18 +165,18 @@
     }
     .gallery .tile {
       position: relative;
-      border: 2px solid #334155;
-      border-radius: 8px;
+      border: 2px solid var(--line);
+      border-radius: 6px;
       overflow: hidden;
       cursor: pointer;
-      background: #0f172a;
+      background: var(--panel-2);
       aspect-ratio: 1;
     }
     .gallery .tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .gallery .tile.selected { border-color: #64b5f6; box-shadow: 0 0 0 2px rgba(100,181,246,0.35); }
+    .gallery .tile.selected { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(201, 168, 118, 0.35); }
     .gallery .tile .tick {
       position: absolute; top: 8px; right: 8px;
-      background: #64b5f6; color: #0f172a;
+      background: var(--gold); color: #12100d;
       width: 24px; height: 24px; border-radius: 50%;
       display: none; align-items: center; justify-content: center;
       font-weight: bold; font-size: 14px;
@@ -120,25 +184,29 @@
     .gallery .tile.selected .tick { display: flex; }
     .gallery .tile.loading {
       display: flex; align-items: center; justify-content: center;
-      color: #64748b; font-size: 13px;
+      color: var(--muted); font-size: 13px;
+      font-family: 'IBM Plex Mono', monospace;
     }
 
     /* PREVIEW */
     .preview-wrap { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; margin-top: 16px; }
     .preview-box {
-      background: repeating-conic-gradient(#1e293b 0% 25%, #263449 0% 50%) 50% / 24px 24px;
-      border: 1px solid #334155; border-radius: 8px;
+      background: repeating-conic-gradient(#161512 0% 25%, #1e1c18 0% 50%) 50% / 24px 24px;
+      border: 1px solid var(--line); border-radius: 6px;
       max-width: 320px; overflow: hidden;
     }
     .preview-box img { display: block; width: 100%; height: auto; }
 
     /* STATUS */
-    .status { font-size: 14px; margin-top: 12px; color: #94a3b8; }
-    .status.error { color: #ef4444; }
-    .status.ok { color: #4ade80; }
+    .status {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px; margin-top: 12px; color: var(--muted);
+    }
+    .status.error { color: var(--red); }
+    .status.ok { color: var(--green); }
     .spinner {
       display: inline-block; width: 14px; height: 14px;
-      border: 2px solid #334155; border-top-color: #64b5f6;
+      border: 2px solid var(--line); border-top-color: var(--gold);
       border-radius: 50%; animation: spin 0.8s linear infinite;
       vertical-align: -2px; margin-right: 8px;
     }
@@ -153,58 +221,73 @@
       margin-top: 16px;
     }
     .result-item {
-      background: #0f172a;
-      border: 1px solid #334155;
-      border-radius: 8px;
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 6px;
       padding: 12px;
     }
     .result-item .label {
-      color: #94a3b8;
-      font-size: 12px;
+      font-family: 'IBM Plex Mono', monospace;
+      color: var(--muted);
+      font-size: 11px;
       text-transform: uppercase;
-      letter-spacing: 1px;
+      letter-spacing: 1.5px;
       margin-bottom: 8px;
     }
     .result-item .status-badge {
       display: inline-block;
+      font-family: 'IBM Plex Mono', monospace;
       padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 12px;
+      border-radius: 3px;
+      font-size: 11px;
       font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
     }
     .result-item .status-badge.processing {
-      background: #fbbf24;
-      color: #0f172a;
+      background: var(--amber);
+      color: #12100d;
     }
     .result-item .status-badge.done {
-      background: #4ade80;
-      color: #0f172a;
+      background: var(--green);
+      color: #12100d;
     }
     .result-item .status-badge.failed {
-      background: #ef4444;
-      color: white;
+      background: var(--red);
+      color: #fff;
     }
     .result-item .result-link {
       display: inline-block;
+      font-family: 'IBM Plex Mono', monospace;
       margin-top: 8px;
-      color: #64b5f6;
+      color: var(--gold);
       text-decoration: none;
-      font-size: 13px;
+      font-size: 12px;
+      letter-spacing: 1px;
     }
     .result-item .result-link:hover {
       text-decoration: underline;
+      color: var(--gold-hi);
     }
 
-    .divider { border: none; border-top: 1px solid #334155; margin: 20px 0; }
+    .divider { border: none; border-top: 1px solid var(--line); margin: 20px 0; }
     .hidden { display: none; }
-    .keys-saved { color: #4ade80; font-size: 13px; margin-left: 10px; }
-    .upload-note { color: #64748b; font-size: 13px; margin-top: 8px; }
+    .keys-saved {
+      font-family: 'IBM Plex Mono', monospace;
+      color: var(--green); font-size: 12px; margin-left: 10px;
+    }
+    .upload-note { color: var(--muted); font-size: 13px; margin-top: 8px; }
   </style>
 </head>
 <body>
   <div class="container">
     <nav>
-      <a href="/app" class="logo">&#9698; Frame to Form</a>
+      <a href="/app" class="logo"><svg viewBox="0 0 104 52" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M4 48 L22 42 M22 42 L98 42 M22 42 L22 4" stroke="#c9a876" stroke-width="1" stroke-dasharray="2 3"/>
+          <path d="M4 26 L4 10 L18 10 M66 10 L80 10 L80 26 M80 32 L80 48 L66 48 M18 48 L4 48 L4 32" stroke="#ece5d8" stroke-width="2.4"/>
+          <path d="M4 10 L22 4 L98 4 L98 42 L80 48 M80 10 L98 4" stroke="#c9a876" stroke-width="1.8"/>
+          <circle cx="80" cy="10" r="3.4" fill="#d94f3d"/>
+        </svg><span>Frame &rarr; Form</span><span class="tagline">production pipeline</span></a>
       <div class="nav-right">
         <a href="/account">Account</a>
         <button class="logout-btn" onclick="logout()">Logout</button>
@@ -213,7 +296,7 @@
 
     <!-- API KEYS -->
     <div class="card">
-      <h2>&#128273; Your API Keys</h2>
+      <h2>Your API Keys</h2>
       <p class="sub">Frame to Form runs on your own keys. They are stored only in this browser and sent only with your requests.</p>
       <div class="row">
         <div class="field">
@@ -281,7 +364,7 @@
       <span class="step-badge">Step 3 &middot; optional</span>
       <h2>Remove background</h2>
       <p class="sub">A clean cut-out gives the 3D conversion a much better result. You can skip this if your images already have a plain background.</p>
-      <p class="sub" style="color: #fbbf24;"><strong>Note:</strong> Background removal will apply to the currently selected images. This affects all conversions below.</p>
+      <p class="sub" style="color: var(--amber);"><strong>Note:</strong> Background removal will apply to the currently selected images. This affects all conversions below.</p>
       <div style="margin-top: 16px;">
         <button class="btn" id="removeBgBtn" onclick="removeBackgroundBatch()">Remove background from selected</button>
         <button class="btn btn-secondary" onclick="skipBg()">Skip this step</button>
@@ -302,7 +385,7 @@
       <!-- RESULTS -->
       <div id="resultsSection" class="hidden" style="margin-top: 20px;">
         <hr class="divider">
-        <h3 style="color: #64b5f6; margin-top: 0;">Conversions</h3>
+        <h3 style="font-family: 'Oswald', sans-serif; color: var(--cream); letter-spacing: 2px; text-transform: uppercase; font-weight: 500; margin-top: 0;">Conversions</h3>
         <div class="results" id="resultsList"></div>
       </div>
     </div>

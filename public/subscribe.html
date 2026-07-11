@@ -4,49 +4,188 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pricing - Frame to Form</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Oswald:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --bg: #0a0a09; --panel: #151412; --panel-2: #0f0e0c; --line: #2b2721;
+      --gold: #c9a876; --gold-hi: #e2c493; --cream: #ece5d8;
+      --text: #cfc8ba; --muted: #8f877a; --green: #5ad178; --red: #e0604c;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; }
-    .container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; }
-    header { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; margin-bottom: 60px; }
-    .logo { font-size: 24px; font-weight: bold; color: #64b5f6; }
-    .nav-links { display: flex; gap: 20px; }
-    .nav-links a { color: #94a3b8; text-decoration: none; }
-    .logout-btn { background: #ef4444; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; }
-    h1 { text-align: center; color: #f1f5f9; margin-bottom: 50px; font-size: 36px; }
-    .pricing-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 30px; margin-bottom: 60px; }
-    .plan { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 40px; text-align: center; }
-    .plan.active { border: 2px solid #64b5f6; }
-    .plan-name { font-size: 24px; color: #64b5f6; margin-bottom: 15px; }
-    .plan-price { font-size: 48px; font-weight: bold; color: #f1f5f9; margin-bottom: 10px; }
-    .plan-price span { font-size: 18px; color: #94a3b8; }
-    .plan-description { color: #94a3b8; margin-bottom: 30px; font-size: 14px; }
-    .plan-features { text-align: left; margin-bottom: 30px; color: #94a3b8; font-size: 14px; }
-    .plan-features li { margin-bottom: 10px; list-style: none; }
-    .plan-features li:before { content: "✓ "; color: #4ade80; margin-right: 8px; }
-    .btn { padding: 12px 30px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
-    .btn-primary { background: #64b5f6; color: #0f172a; }
-    .btn-primary:hover { background: #3b82f6; }
-    .account-link { color: #64b5f6; text-decoration: none; margin-top: 20px; display: block; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg); color: var(--text);
+    }
+    .container { max-width: 900px; margin: 0 auto; padding: 20px 20px 60px; }
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 20px 0; border-bottom: 1px solid var(--line); margin-bottom: 60px;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 12px;
+      font-family: 'IBM Plex Mono', monospace;
+      color: var(--gold); font-size: 15px; font-weight: 600;
+      letter-spacing: 3px; text-transform: uppercase; text-decoration: none;
+    }
+    .logo svg { height: 26px; width: auto; display: block; }
+    .nav-links { display: flex; gap: 20px; align-items: center; }
+    .nav-links a {
+      font-family: 'IBM Plex Mono', monospace;
+      color: var(--muted); text-decoration: none;
+      font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+    }
+    .nav-links a:hover { color: var(--gold); }
+    .logout-btn {
+      font-family: 'IBM Plex Mono', monospace;
+      background: transparent; color: var(--red);
+      border: 1px solid var(--red);
+      padding: 7px 14px; border-radius: 4px; cursor: pointer;
+      font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;
+    }
+    .logout-btn:hover { background: rgba(224, 96, 76, 0.12); }
+    h1 {
+      text-align: center;
+      font-family: 'Oswald', 'Arial Narrow', sans-serif;
+      color: var(--cream); margin-bottom: 50px;
+      font-size: 34px; font-weight: 500;
+      letter-spacing: 3px; text-transform: uppercase;
+    }
+    .pricing-container {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 26px; margin-bottom: 40px;
+    }
+    .plan {
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 6px; padding: 40px; text-align: center;
+    }
+    .plan.featured { border: 1px solid var(--gold); }
+    .plan-name {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px; color: var(--gold); margin-bottom: 18px;
+      letter-spacing: 3px; text-transform: uppercase;
+    }
+    .plan-price {
+      font-family: 'Oswald', 'Arial Narrow', sans-serif;
+      font-size: 52px; font-weight: 500; color: var(--cream); margin-bottom: 8px;
+    }
+    .plan-price span { font-size: 17px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
+    .plan-description { color: var(--muted); margin-bottom: 28px; font-size: 14px; }
+    .plan-features { text-align: left; margin: 0 auto 30px; max-width: 280px; color: var(--text); font-size: 14px; }
+    .plan-features li { margin-bottom: 11px; list-style: none; }
+    .plan-features li:before { content: "\2713 "; color: var(--green); margin-right: 8px; font-family: 'IBM Plex Mono', monospace; }
+    .btn {
+      font-family: 'IBM Plex Mono', monospace;
+      padding: 13px 32px; border: none; border-radius: 4px;
+      cursor: pointer; font-weight: 600; font-size: 13px;
+      letter-spacing: 2px; text-transform: uppercase;
+    }
+    .btn-primary { background: var(--gold); color: #12100d; }
+    .btn-primary:hover { background: var(--gold-hi); }
+    .current-tag {
+      font-family: 'IBM Plex Mono', monospace;
+      display: inline-block; padding: 10px 24px;
+      border: 1px solid var(--line); border-radius: 4px;
+      color: var(--muted); font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+    }
+    .status { font-family: 'IBM Plex Mono', monospace; text-align: center; font-size: 13px; color: var(--red); min-height: 20px; }
+    .byok-note {
+      text-align: center; color: var(--muted); font-size: 13px;
+      max-width: 560px; margin: 20px auto 0; line-height: 1.6;
+    }
+    .account-link {
+      font-family: 'IBM Plex Mono', monospace;
+      color: var(--gold); text-decoration: none; margin-top: 26px; display: block;
+      text-align: center; font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+    }
     .account-link:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
-      <div class="logo">📐 Frame to Form</div>
+      <a href="/" class="logo">
+        <svg viewBox="0 0 104 52" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M4 48 L22 42 M22 42 L98 42 M22 42 L22 4" stroke="#c9a876" stroke-width="1" stroke-dasharray="2 3"/>
+          <path d="M4 26 L4 10 L18 10 M66 10 L80 10 L80 26 M80 32 L80 48 L66 48 M18 48 L4 48 L4 32" stroke="#ece5d8" stroke-width="2.4"/>
+          <path d="M4 10 L22 4 L98 4 L98 42 L80 48 M80 10 L98 4" stroke="#c9a876" stroke-width="1.8"/>
+          <circle cx="80" cy="10" r="3.4" fill="#d94f3d"/>
+        </svg>
+        Frame &rarr; Form
+      </a>
       <div class="nav-links">
-        <a href="/">Home</a>
+        <a href="/app">App</a>
         <a href="/account">Account</a>
-        <button class="logout-btn" onclick="logout()">Logout</button>
+        <button class="logout-btn" onclick="handleLogout()">Logout</button>
       </div>
     </header>
 
-    <h1>Choose Your Plan</h1>
+    <h1>Choose your plan</h1>
 
     <div class="pricing-container">
-      <div class="plan active">
+      <div class="plan">
         <div class="plan-name">Trial</div>
-        <div class="plan-price">Free<span>/14 days</span></div>
-        <div class="plan-description">Get started with Frame to Form</div>
+        <div class="plan-price">Free<span> / 14 days</span></div>
+        <div class="plan-description">The full pipeline, on the house</div>
         <ul class="plan-features">
+          <li>AI image generation with FLUX.2 Pro</li>
+          <li>Batch select &amp; convert to 3D</li>
+          <li>Optional background removal</li>
+          <li>Production-ready GLB downloads</li>
+        </ul>
+        <span class="current-tag">Included at signup</span>
+      </div>
+
+      <div class="plan featured">
+        <div class="plan-name">Pro</div>
+        <div class="plan-price">&pound;19.99<span> / month</span></div>
+        <div class="plan-description">For working previs artists and designers</div>
+        <ul class="plan-features">
+          <li>Everything in the trial, uninterrupted</li>
+          <li>Unlimited generations &amp; conversions</li>
+          <li>Bring your own keys &mdash; no usage markup</li>
+          <li>Cancel any time from your account</li>
+        </ul>
+        <button class="btn btn-primary" id="subscribeBtn" onclick="startCheckout()">Subscribe</button>
+      </div>
+    </div>
+
+    <div class="status" id="checkoutStatus"></div>
+
+    <p class="byok-note">Frame to Form runs on your own fal.ai and Remove.bg API keys &mdash; you pay those providers directly for what you generate, typically pennies per asset. Your subscription covers the pipeline.</p>
+
+    <a href="/account" class="account-link">Back to account</a>
+  </div>
+
+  <script>
+    async function startCheckout() {
+      const btn = document.getElementById('subscribeBtn');
+      const status = document.getElementById('checkoutStatus');
+      btn.disabled = true;
+      status.textContent = '';
+      try {
+        const res = await fetch('/api/create-checkout', { method: 'POST' });
+        const data = await res.json();
+        if (data.url) {
+          window.location.href = data.url;
+        } else {
+          status.textContent = data.error || 'Could not start checkout. Please try again.';
+          btn.disabled = false;
+        }
+      } catch (err) {
+        console.error('Checkout error:', err);
+        status.textContent = 'Could not start checkout. Please try again.';
+        btn.disabled = false;
+      }
+    }
+
+    function handleLogout() {
+      fetch('/api/logout', { method: 'POST' })
+        .then(() => { window.location.href = '/login'; })
+        .catch(() => { window.location.href = '/login'; });
+    }
+  </script>
+</body>
+</html>
