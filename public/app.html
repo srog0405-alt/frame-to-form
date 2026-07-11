@@ -277,6 +277,9 @@
       color: var(--green); font-size: 12px; margin-left: 10px;
     }
     .upload-note { color: var(--muted); font-size: 13px; margin-top: 8px; }
+    .key-help { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 6px; letter-spacing: 0.5px; }
+    .key-help a { color: var(--gold); text-decoration: none; }
+    .key-help a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -289,6 +292,7 @@
           <circle cx="80" cy="10" r="3.4" fill="#d94f3d"/>
         </svg><span>Frame &rarr; Form</span><span class="tagline">production pipeline</span></a>
       <div class="nav-right">
+        <a href="/subscribe">Upgrade</a>
         <a href="/account">Account</a>
         <button class="logout-btn" onclick="logout()">Logout</button>
       </div>
@@ -302,10 +306,12 @@
         <div class="field">
           <label for="falKey">fal.ai key (image generation + 3D conversion)</label>
           <input type="password" id="falKey" placeholder="key_id:key_secret" autocomplete="off">
+          <div class="key-help">Get one free at <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener">fal.ai/dashboard/keys</a> &mdash; sign in, Add key, copy</div>
         </div>
         <div class="field">
           <label for="rbgKey">Remove.bg key (background removal)</label>
           <input type="password" id="rbgKey" placeholder="Your Remove.bg API key" autocomplete="off">
+          <div class="key-help">Optional &mdash; 50 free calls/month: sign up at <a href="https://www.remove.bg/api" target="_blank" rel="noopener">remove.bg/api</a>, copy the key from your dashboard</div>
         </div>
       </div>
       <button class="btn btn-secondary" onclick="saveKeys()">Save keys</button>
