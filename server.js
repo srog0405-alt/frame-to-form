@@ -60,7 +60,11 @@ async function initializeDatabase() {
 initializeDatabase();
 
 // MIDDLEWARE
-app.use(express.json({ limit: '50mb' }));
+const jsonParser = express.json({ limit: '50mb' });
+app.use((req, res, next) => {
+  if (req.originalUrl === '/api/webhook') return next();
+  jsonParser(req, res, next);
+});
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
@@ -78,16 +82,26 @@ function requireAuth(req, res, next) {
   next();
 }
 
-function requireSubscription(req, res, next) {
+async function requireSubscription(req, res, next) {
   if (!req.session.userId) return res.redirect('/login');
-  const now = Math.floor(Date.now() / 1000);
-  if (!req.session.subscription_status && req.session.trial_end < now) return res.redirect('/subscribe');
-  req.user = {
-    id: req.session.userId,
-    subscription_status: req.session.subscription_status,
-    trial_end: req.session.trial_end
-  };
-  next();
+  try {
+    const result = await pool.query('SELECT subscription_status, trial_end FROM users WHERE id = $1', [req.session.userId]);
+    if (result.rows.length === 0) return res.redirect('/login');
+    const u = result.rows[0];
+    const now = Math.floor(Date.now() / 1000);
+    const isActive = u.subscription_status === 'active';
+    const trialValid = u.trial_end && u.trial_end > now;
+    if (!isActive && !trialValid) return res.redirect('/subscribe');
+    req.user = {
+      id: req.session.userId,
+      subscription_status: u.subscription_status,
+      trial_end: u.trial_end
+    };
+    next();
+  } catch (err) {
+    console.error('Subscription check error:', err);
+    return res.redirect('/login');
+  }
 }
 
 // PAGES
@@ -270,10 +284,7 @@ app.post('/api/create-checkout', requireAuth, async (req, res) => {
       line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
       mode: 'subscription',
       success_url: `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/subscribe`,
-      subscription_data: {
-        trial_period_days: 14
-      }
+      cancel_url: `${baseUrl}/subscribe`
     });
 
     res.json({ url: session.url });
@@ -331,7 +342,7 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, 
     case 'customer.subscription.updated':
     case 'customer.subscription.created': {
       const sub = event.data.object;
-      await pool.query('UPDATE users SET subscription_status = $1, subscription_id = $2 WHERE stripe_customer_id = $3', ['active', sub.id, sub.customer]);
+      await pool.query('UPDATE users SET subscription_status = $1, subscription_id = $2 WHERE stripe_customer_id = $3', [sub.status, sub.id, sub.customer]);
       break;
     }
     case 'customer.subscription.deleted': {
@@ -623,7 +634,7 @@ app.get('/admin/stats', async (req, res) => {
 </head>
 <body>
   <div class="container">
-    <h1>📊 Frame to Form — Admin Dashboard</h1>
+    <h1>ðŸ“Š Frame to Form â€” Admin Dashboard</h1>
     
     <div class="stats-grid">
       <div class="stat-card">
