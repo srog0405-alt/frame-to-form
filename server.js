@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
+const PgSession = require('connect-pg-simple')(session);
 const multer = require('multer');
 const fetch = require('node-fetch');
 const FormData = require('form-data');
@@ -68,10 +69,15 @@ app.use((req, res, next) => {
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
+  store: new PgSession({ pool: pool, createTableIfMissing: true }),
   secret: process.env.SESSION_SECRET || 'ftf-secret-change-me',
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false, maxAge: 7 * 24 * 60 * 60 * 1000 }
+  proxy: true,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 30 * 24 * 60 * 60 * 1000
+  }
 }));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
@@ -634,7 +640,7 @@ app.get('/admin/stats', async (req, res) => {
 </head>
 <body>
   <div class="container">
-    <h1>ðŸ“Š Frame to Form â€” Admin Dashboard</h1>
+    <h1>Ã°Å¸â€œÅ  Frame to Form Ã¢â‚¬â€ Admin Dashboard</h1>
     
     <div class="stats-grid">
       <div class="stat-card">
