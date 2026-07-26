@@ -412,9 +412,12 @@
       document.getElementById('falKey').value = localStorage.getItem('ftf_fal_key') || '';
       document.getElementById('rbgKey').value = localStorage.getItem('ftf_rbg_key') || '';
     }
-    function saveKeys() {
+    function persistKeys() {
       localStorage.setItem('ftf_fal_key', document.getElementById('falKey').value.trim());
       localStorage.setItem('ftf_rbg_key', document.getElementById('rbgKey').value.trim());
+    }
+    function saveKeys() {
+      persistKeys();
       var badge = document.getElementById('keysSaved');
       badge.classList.remove('hidden');
       setTimeout(function() { badge.classList.add('hidden'); }, 2000);
@@ -422,6 +425,8 @@
     function falKey() { return document.getElementById('falKey').value.trim(); }
     function rbgKey() { return document.getElementById('rbgKey').value.trim(); }
     loadKeys();
+    document.getElementById('falKey').addEventListener('input', persistKeys);
+    document.getElementById('rbgKey').addEventListener('input', persistKeys);
 
     // ---------- HELPERS ----------
     function setStatus(id, msg, kind) {
