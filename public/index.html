@@ -67,6 +67,7 @@
     .btn-primary:hover { background: var(--gold-hi); border-color: var(--gold-hi); }
     .btn-secondary { background: transparent; color: var(--gold); border: 1px solid var(--gold); }
     .btn-secondary:hover { background: rgba(201, 168, 118, 0.1); }
+    .btn { white-space: nowrap; }
 
     /* HERO */
     .hero { text-align: center; padding: 90px 0 30px; }
@@ -160,6 +161,10 @@
     @media (max-width: 640px) {
       .hero h1 { font-size: 34px; }
       nav.site { display: none; }
+      header { flex-direction: column; align-items: flex-start; gap: 14px; }
+      .auth-buttons { flex-wrap: wrap; }
+      .btn { padding: 9px 14px; font-size: 11px; letter-spacing: 1px; }
+      .schematic { display: none; }
     }
   </style>
 </head>
