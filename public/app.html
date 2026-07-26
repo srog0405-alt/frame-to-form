@@ -148,12 +148,15 @@
       letter-spacing: 2px; text-transform: uppercase;
     }
     .btn:hover { background: var(--gold-hi); border-color: var(--gold-hi); }
+    .btn:active { background: var(--gold-hi); border-color: var(--gold-hi); transform: scale(0.97); }
     .btn:disabled { background: var(--line); border-color: var(--line); color: var(--muted); cursor: not-allowed; }
     .btn-secondary {
       background: transparent; color: var(--gold);
       border: 1px solid var(--gold);
     }
     .btn-secondary:hover { background: rgba(201, 168, 118, 0.1); }
+    .btn-secondary:active { background: rgba(201, 168, 118, 0.25); transform: scale(0.97); }
+    .btn-secondary.is-active { background: rgba(201, 168, 118, 0.25); border-color: var(--gold-hi); box-shadow: 0 0 0 2px rgba(201, 168, 118, 0.35); }
     .btn-secondary:disabled { border-color: var(--line); color: var(--muted); background: transparent; }
 
     /* GALLERY */
@@ -374,7 +377,7 @@
       <p class="sub" style="color: var(--amber);"><strong>Note:</strong> Background removal will apply to the currently selected images. This affects all conversions below.</p>
       <div style="margin-top: 16px;">
         <button class="btn" id="removeBgBtn" onclick="removeBackgroundBatch()">Remove background from selected</button>
-        <button class="btn btn-secondary" onclick="skipBg()">Skip this step</button>
+        <button class="btn btn-secondary" id="skipBgBtn" onclick="skipBg()">Skip this step</button>
       </div>
       <div class="status" id="bgStatus"></div>
     </div>
@@ -541,8 +544,13 @@
     }
 
     function skipBg() {
+      var btn = document.getElementById('skipBgBtn');
+      btn.classList.add('is-active');
+      btn.textContent = 'Skipped ✓';
       setStatus('bgStatus', 'Background removal skipped. Go straight to Step 4 below.', 'ok');
-      document.getElementById('convertCard').scrollIntoView({ behavior: 'smooth' });
+      setTimeout(function() {
+        document.getElementById('convertCard').scrollIntoView({ behavior: 'smooth' });
+      }, 400);
     }
 
     function removeBackgroundBatch() {
