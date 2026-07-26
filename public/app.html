@@ -681,7 +681,9 @@
             if (data.status === 'FINISHED' && data.result_url) {
               conversions[index].status = 'done';
               conversions[index].resultUrl = data.result_url;
-              item.innerHTML = '<div class="label">Image ' + (index + 1) + '</div><div class="status-badge done">Done &#10003;</div><a href="' + data.result_url + '" class="result-link" download>&#11015; Download GLB</a>';
+              var glbFilename = 'F2F_' + (index + 1) + '.glb';
+              var downloadUrl = '/api/download?url=' + encodeURIComponent(data.result_url) + '&filename=' + encodeURIComponent(glbFilename);
+              item.innerHTML = '<div class="label">Image ' + (index + 1) + '</div><div class="status-badge done">Done &#10003;</div><a href="' + downloadUrl + '" class="result-link" download="' + glbFilename + '">&#11015; Download GLB</a>';
               document.getElementById('convertBtn').disabled = false;
             } else if (data.status === 'FAILED') {
               conversions[index].status = 'failed';
