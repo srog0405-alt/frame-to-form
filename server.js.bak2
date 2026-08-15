@@ -1,7 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
-const PgSession = require('connect-pg-simple')(session);
 const multer = require('multer');
 const fetch = require('node-fetch');
 const FormData = require('form-data');
@@ -69,15 +68,10 @@ app.use((req, res, next) => {
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
-  store: new PgSession({ pool: pool, createTableIfMissing: true }),
   secret: process.env.SESSION_SECRET || 'ftf-secret-change-me',
   resave: false,
   saveUninitialized: false,
-  proxy: true,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 30 * 24 * 60 * 60 * 1000
-  }
+  cookie: { secure: false, maxAge: 7 * 24 * 60 * 60 * 1000 }
 }));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
@@ -162,15 +156,9 @@ app.post('/auth/signup', async (req, res) => {
 
     const trialEnd = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);
 
-    const subscription = await stripe.subscriptions.create({
-      customer: customer.id,
-      items: [{ price: process.env.STRIPE_PRICE_ID }],
-      trial_end: trialEnd
-    });
-
     const result = await pool.query(
-      'INSERT INTO users (email, password, stripe_customer_id, subscription_status, subscription_id, trial_end) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-      [email.toLowerCase(), hashed, customer.id, 'trialing', subscription.id, trialEnd]
+      'INSERT INTO users (email, password, stripe_customer_id, subscription_status, trial_end) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [email.toLowerCase(), hashed, customer.id, 'trialing', trialEnd]
     );
 
     req.session.userId = result.rows[0].id;
@@ -646,7 +634,7 @@ app.get('/admin/stats', async (req, res) => {
 </head>
 <body>
   <div class="container">
-    <h1>🎬 Frame to Form – Admin Dashboard</h1>
+    <h1>ðŸ“Š Frame to Form â€” Admin Dashboard</h1>
     
     <div class="stats-grid">
       <div class="stat-card">
@@ -705,3 +693,6 @@ app.get('/admin/stats', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`\n FRAME TO FORM | Running | http://localhost:${PORT} \n`);
 });
+
+
+
