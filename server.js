@@ -474,7 +474,25 @@ app.post('/api/trellis/submit', requireSubscription, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Hunyuan poll
+// Hunyuan submit
+app.post('/api/hunyuan/submit', requireSubscription, async (req, res) => {
+  try {
+    const falkey = req.headers['x-fal-key'];
+    if (!falkey) return res.status(400).json({ error: 'Missing fal.ai key' });
+    const { image_url } = req.body;
+    if (!image_url) return res.status(400).json({ error: 'Missing image_url' });
+
+    const result = await fetch('https://queue.fal.run/fal-ai/hunyuan-3d/v3.1/pro/image-to-3d', {
+      method: 'POST',
+      headers: { 'Authorization': 'Key ' + falkey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_url })
+    });
+    const data = await result.json();
+    return res.json({ task_id: data.request_id || data.id });
+  } catch (e) { 
+    return res.status(500).json({ error: e.message }); 
+  }
+});// Hunyuan poll
 app.get('/api/hunyuan/status/:taskId', requireSubscription, async (req, res) => {
   try {
     const falkey = req.headers['x-fal-key'];
