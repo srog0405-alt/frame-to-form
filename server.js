@@ -157,11 +157,8 @@ app.post('/auth/signup', async (req, res) => {
     if (existing.rows.length > 0) return res.status(400).json({ error: 'An account with this email already exists' });
 
     const hashed = await bcryptjs.hash(password, 10);
-
     const customer = await stripe.customers.create({ email: email.toLowerCase() });
-
     const trialEnd = Math.floor(Date.now() / 1000) + (14 * 24 * 60 * 60);
-
     const subscription = await stripe.subscriptions.create({
       customer: customer.id,
       items: [{ price: process.env.STRIPE_PRICE_ID }],
@@ -211,7 +208,6 @@ app.post('/api/forgot-password', async (req, res) => {
 
   try {
     const user = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
-    
     if (user.rows.length === 0) {
       return res.json({ success: true, message: 'If an account exists, a reset link has been sent' });
     }
@@ -230,16 +226,10 @@ app.post('/api/forgot-password', async (req, res) => {
       from: 'noreply@frame-to-form.com',
       to: email.toLowerCase(),
       subject: 'Reset your Frame to Form password',
-      html: `
-        <h2>Password Reset Request</h2>
-        <p>Click the link below to reset your password. This link expires in 1 hour.</p>
-        <a href="${resetLink}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a>
-        <p>Or copy this link: ${resetLink}</p>
-        <p>If you didn't request this, you can ignore this email.</p>
-      `
+      html: `<h2>Password Reset Request</h2><p>Click the link below to reset your password. This link expires in 1 hour.</p><a href="${resetLink}">Reset Password</a>`
     });
 
-    res.json({ success: true, message: 'If an account exists, a reset link has been sent' });
+    res.json({ success: true, message: 'Reset link sent to your email' });
   } catch (err) {
     console.error('Forgot password error:', err);
     res.status(500).json({ error: 'Something went wrong. Please try again.' });
@@ -252,222 +242,128 @@ app.post('/api/reset-password', async (req, res) => {
   if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
 
   try {
-    const now = Math.floor(Date.now() / 1000);
+    const resetToken = await pool.query('SELECT * FROM password_reset_tokens WHERE token = $1', [token]);
+    if (resetToken.rows.length === 0) return res.status(400).json({ error: 'Invalid or expired token' });
     
-    const resetToken = await pool.query(
-      'SELECT * FROM password_reset_tokens WHERE token = $1 AND expires_at > $2',
-      [token, now]
-    );
-
-    if (resetToken.rows.length === 0) {
-      return res.status(400).json({ error: 'Invalid or expired reset link' });
-    }
+    const now = Math.floor(Date.now() / 1000);
+    if (resetToken.rows[0].expires_at < now) return res.status(400).json({ error: 'Token has expired' });
 
     const userId = resetToken.rows[0].user_id;
     const hashed = await bcryptjs.hash(password, 10);
 
     await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashed, userId]);
+    await pool.query('DELETE FROM password_reset_tokens WHERE token = $1', [token]);
 
-    await pool.query('DELETE FROM password_reset_tokens WHERE user_id = $1', [userId]);
-
-    res.json({ success: true, message: 'Password reset successfully', redirect: '/login' });
+    res.json({ success: true, message: 'Password reset successfully' });
   } catch (err) {
     console.error('Reset password error:', err);
     res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
 });
 
-app.post('/api/logout', (req, res) => {
-  req.session.destroy();
-  res.json({ success: true });
-});
-
-// STRIPE ROUTES
-app.post('/api/create-checkout', requireAuth, async (req, res) => {
+// FLUX IMAGE GENERATION
+app.post('/api/flux/generate', requireSubscription, async (req, res) => {
   try {
-    const user = await pool.query('SELECT * FROM users WHERE id = $1', [req.session.userId]);
-    if (user.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const falkey = req.headers['x-fal-key'];
+    const prompt = req.body.prompt;
+    const numImages = parseInt(req.body.numImages) || 1;
+    const subjectType = req.body.subjectType || 'object';
+    
+    if (!falkey) return res.status(400).json({ error: 'Missing fal.ai key' });
+    if (!prompt) return res.status(400).json({ error: 'Prompt required' });
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const urls = [];
+    for (let i = 0; i < numImages; i++) {
+      const submit = await fetch('https://queue.fal.run/fal-ai/flux-2-pro/requests/submit/text-to-image', {
+        method: 'POST',
+        headers: { 'Authorization': 'Key ' + falkey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: prompt })
+      });
+      if (!submit.ok) {
+        const data = await submit.json();
+        return res.status(submit.status).json({ error: data.message || data.detail || 'FLUX error' });
+      }
+      const requestData = await submit.json();
+      const requestId = requestData.request_id;
+      if (!requestId) return res.status(500).json({ error: 'No request_id from FLUX' });
 
-    const session = await stripe.checkout.sessions.create({
-      customer: user.rows[0].stripe_customer_id,
-      payment_method_types: ['card'],
-      line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
-      mode: 'subscription',
-      success_url: `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/subscribe`
-    });
+      let done = false;
+      let attempts = 0;
+      while (!done && attempts < 300) {
+        const status = await fetch('https://queue.fal.run/fal-ai/flux-2-pro/requests/' + requestId + '/status', {
+          headers: { 'Authorization': 'Key ' + falkey }
+        });
+        const statusData = await status.json();
+        const statusValue = statusData.status || statusData.state || '';
 
-    res.json({ url: session.url });
-  } catch (err) {
-    console.error('Checkout error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/api/user', requireAuth, async (req, res) => {
-  try {
-    const user = await pool.query('SELECT subscription_status, trial_end FROM users WHERE id = $1', [req.session.userId]);
-    if (user.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    const now = Math.floor(Date.now() / 1000);
-    const daysLeft = user.rows[0].trial_end ? Math.ceil((user.rows[0].trial_end - now) / 86400) : 0;
-    res.json({
-      subscription_status: user.rows[0].subscription_status,
-      trial_end: user.rows[0].trial_end,
-      trial_days_left: daysLeft
-    });
-  } catch (err) {
-    console.error('User fetch error:', err);
-    res.status(500).json({ error: 'Something went wrong. Please try again.' });
-  }
-});
-
-app.post('/api/customer-portal', requireAuth, async (req, res) => {
-  try {
-    const user = await pool.query('SELECT stripe_customer_id FROM users WHERE id = $1', [req.session.userId]);
-    if (user.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    const portalSession = await stripe.billingPortal.sessions.create({
-      customer: user.rows[0].stripe_customer_id,
-      return_url: `${req.protocol}://${req.get('host')}/account`
-    });
-    res.json({ url: portalSession.url });
-  } catch (err) {
-    console.error('Portal error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Stripe webhook
-app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  let event;
-
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    console.error('Webhook error:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  switch (event.type) {
-    case 'customer.subscription.updated':
-    case 'customer.subscription.created': {
-      const sub = event.data.object;
-      await pool.query('UPDATE users SET subscription_status = $1, subscription_id = $2 WHERE stripe_customer_id = $3', [sub.status, sub.id, sub.customer]);
-      break;
+        if (statusValue === 'COMPLETED') {
+          const result = await fetch('https://queue.fal.run/fal-ai/flux-2-pro/requests/' + requestId, {
+            headers: { 'Authorization': 'Key ' + falkey }
+          });
+          const resultData = await result.json();
+          const url = resultData.images?.[0]?.url || resultData.output?.images?.[0]?.url || resultData.output?.url;
+          if (url) urls.push(url);
+          done = true;
+        } else if (statusValue === 'FAILED') {
+          return res.status(500).json({ error: 'FLUX generation failed' });
+        }
+        if (!done) {
+          attempts++;
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
     }
-    case 'customer.subscription.deleted': {
-      const sub = event.data.object;
-      await pool.query('UPDATE users SET subscription_status = $1 WHERE stripe_customer_id = $2', ['cancelled', sub.customer]);
-      break;
-    }
-  }
-
-  res.json({ received: true });
-});
-
-// PIPELINE ROUTES
-
-// Remove.bg proxy
-app.post('/api/remove-bg', requireSubscription, upload.single('image'), async (req, res) => {
-  try {
-    const apikey = req.headers['x-removebg-key'];
-    if (!apikey) return res.status(400).json({ error: 'Missing Remove.bg API key' });
-    if (!req.file) return res.status(400).json({ error: 'No image provided' });
-
-    const fd = new FormData();
-    fd.append('image_file', req.file.buffer, { filename: req.file.originalname || 'image.png', contentType: req.file.mimetype });
-
-    const r = await fetch('https://api.remove.bg/v1.0/removebg', { method: 'POST', headers: { 'X-Api-Key': apikey }, body: fd });
-    if (!r.ok) {
-      const err = await r.json();
-      return res.status(r.status).json({ error: err.message || 'Remove.bg error' });
-    }
-
-    const buf = await r.buffer();
-    res.set('Content-Type', 'image/png');
-    res.send(buf);
+    res.json({ images: urls });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Flux image generation
-app.post('/api/generate-image', requireSubscription, async (req, res) => {
+// REMOVE.BG
+app.post('/api/remove-bg', requireSubscription, async (req, res) => {
   try {
-    const falkey = req.headers['x-fal-key'];
-    if (!falkey) return res.status(400).json({ error: 'Missing fal.ai key' });
-    const { prompt, index, subjectType } = req.body;
-    const seeds = [42, 154, 286, 512, 999, 1337, 2048, 7777, 33337, 65535];
-    const fullPrompt = subjectType === 'people'
-      ? prompt + '. full body shot, entire figure visible head to toe, legs and feet fully visible, standing on ground, no crop, wide shot'
-      : prompt;
-    const imageSizes = [832, 896];
-    const seed = seeds[index % seeds.length];
-    const imageSize = imageSizes[index % imageSizes.length];
+    const rbgkey = req.headers['x-removebg-key'];
+    if (!rbgkey) return res.status(400).json({ error: 'Missing Remove.bg key' });
+    if (!req.file && !req.body.image) return res.status(400).json({ error: 'No image' });
 
-    const r = await fetch('https://fal.run/fal-ai/flux-2-pro', {
+    const imageBuffer = req.file ? req.file.buffer : Buffer.from(req.body.image, 'base64');
+    const fd = new FormData();
+    fd.append('image_file', imageBuffer, 'image.png');
+
+    const response = await fetch('https://api.remove.bg/v1.0/removebg', {
       method: 'POST',
-      headers: { 'Authorization': 'Key ' + falkey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: fullPrompt, image_size: { width: imageSize, height: imageSize }, seed })
+      headers: { 'X-API-Key': rbgkey },
+      body: fd
     });
 
-    if (!r.ok) {
-      let err = {};
-      try { err = await r.json(); } catch (parseErr) {}
-      let detail = err.message || err.detail || 'Flux API error';
-      if (Array.isArray(detail)) detail = detail.map(function(d) { return d.msg || JSON.stringify(d); }).join('; ');
-      else if (typeof detail === 'object') detail = JSON.stringify(detail);
-      return res.status(r.status).json({ error: detail });
+    if (!response.ok) {
+      const data = await response.json();
+      return res.status(response.status).json({ error: data.errors?.[0]?.title || 'Remove.bg failed' });
     }
 
-    const data = await r.json();
-    if (!data.images || data.images[0] === undefined) {
-      let detail = 'No image returned from Flux';
-      if (data.detail) {
-        detail = Array.isArray(data.detail) ? data.detail.map(d => d.msg).join(', ') : data.detail;
-      }
-      console.error('Flux API error [' + r.status + ']:', JSON.stringify(data));
-      return res.status(500).json({ error: 'Flux - ' + detail });
-    }
-
-    const imageUrl = data.images[0].url;
-    if (!imageUrl) return res.status(500).json({ error: 'No image URL from Flux' });
-    res.json({ image_url: imageUrl });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const buffer = await response.buffer();
+    res.set('Content-Type', 'image/png');
+    res.send(buffer);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Trellis submit
+// TRELLIS-2 SUBMIT
 app.post('/api/trellis/submit', requireSubscription, async (req, res) => {
   try {
     const falkey = req.headers['x-fal-key'];
     if (!falkey) return res.status(400).json({ error: 'Missing fal.ai key' });
-    const { image_url, image_base64 } = req.body;
-    if (!image_url && !image_base64) return res.status(400).json({ error: 'No image provided' });
-
-    let finalUrl = image_url;
-
-    if (!finalUrl) {
-      const imageBase64 = image_base64.match(/data:[^;]*;base64,(.+)/)?.[1];
-      const buffer = Buffer.from(imageBase64, 'base64');
-      const filename = 'figure_' + Date.now() + '.png';
-      const initData = await fetch('https://rest.alpha.fal.ai/storage/upload/initiate?storage_type=fal-cdn-v3', {
-        method: 'POST',
-        headers: { 'Authorization': 'Key ' + falkey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_name: filename, content_type: 'image/png' })
-      });
-      if (!initData.ok) throw new Error('CDN initiate failed: ' + initData.status);
-      const initBody = await initData.json();
-      const uploadUrl = initBody.upload_url;
-      if (!uploadUrl) throw new Error('No upload_url from CDN');
-      const putResp = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: buffer });
-      if (!putResp.ok) throw new Error('CDN PUT failed: ' + putResp.status);
-      finalUrl = initBody.file_url;
+    
+    let body;
+    if (req.body.image_base64) {
+      body = { image: { data: req.body.image_base64 } };
+    } else if (req.body.image_url) {
+      body = { image_url: req.body.image_url };
+    } else {
+      return res.status(400).json({ error: 'No image provided' });
     }
 
-    const submit = await fetch('https://queue.fal.run/fal-ai/trellis-2', {
+    const submit = await fetch('https://queue.fal.run/fal-ai/trellis-2/requests/submit/image-to-3d', {
       method: 'POST',
       headers: { 'Authorization': 'Key ' + falkey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image_url: finalUrl })
+      body: JSON.stringify(body)
     });
     if (!submit.ok) {
       const data = await submit.json();
@@ -490,14 +386,71 @@ app.get('/api/trellis/status/:taskId', requireSubscription, async (req, res) => 
     const status = await fetch('https://queue.fal.run/fal-ai/trellis-2/requests/' + taskId + '/status', {
       headers: { 'Authorization': 'Key ' + falkey }
     });
-    const statusData = await status.json(); console.log('Trellis status reply:', JSON.stringify(statusData));
+    const statusData = await status.json();
     const statusValue = statusData.status || statusData.state || '';
 
     if (statusValue === 'COMPLETED') {
       const result = await fetch('https://queue.fal.run/fal-ai/trellis-2/requests/' + taskId, {
         headers: { 'Authorization': 'Key ' + falkey }
       });
-      const resultData = await result.json(); console.log('Trellis result reply:', JSON.stringify(resultData));
+      const resultData = await result.json();
+      const url = resultData.model_glb?.url || resultData.output?.model_glb?.url || resultData.model_mesh?.url || resultData.output?.model_mesh?.url || resultData.model_glb_url || resultData.output?.model_glb_url || resultData.data?.model_glb_url;
+      return res.json({ status: 'FINISHED', result_url: url });
+    }
+    if (statusValue === 'FAILED' || statusValue === 'ERROR') return res.json({ status: 'FAILED', error: statusData.error || 'Failed' });
+    res.json({ status: 'PROCESSING' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// HUNYUAN3D SUBMIT (NEW)
+app.post('/api/hunyuan/submit', requireSubscription, async (req, res) => {
+  try {
+    const falkey = req.headers['x-fal-key'];
+    if (!falkey) return res.status(400).json({ error: 'Missing fal.ai key' });
+    
+    let body;
+    if (req.body.image_base64) {
+      body = { image: { data: req.body.image_base64 } };
+    } else if (req.body.image_url) {
+      body = { image_url: req.body.image_url };
+    } else {
+      return res.status(400).json({ error: 'No image provided' });
+    }
+
+    const submit = await fetch('https://queue.fal.run/fal-ai/hunyuan-3d/v3.1/pro/image-to-3d/requests/submit/image-to-3d', {
+      method: 'POST',
+      headers: { 'Authorization': 'Key ' + falkey, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!submit.ok) {
+      const data = await submit.json();
+      return res.status(submit.status).json({ error: data.message || data.detail || 'Hunyuan error' });
+    }
+    const requestData = await submit.json();
+    const requestId = requestData.request_id;
+    if (!requestId) return res.status(500).json({ error: 'No request_id from Hunyuan' });
+    res.json({ task_id: requestId });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Hunyuan poll (NEW)
+app.get('/api/hunyuan/status/:taskId', requireSubscription, async (req, res) => {
+  try {
+    const falkey = req.headers['x-fal-key'];
+    if (!falkey) return res.status(400).json({ error: 'Missing fal.ai key' });
+    const taskId = req.params.taskId;
+
+    const status = await fetch('https://queue.fal.run/fal-ai/hunyuan-3d/v3.1/pro/image-to-3d/requests/' + taskId + '/status', {
+      headers: { 'Authorization': 'Key ' + falkey }
+    });
+    const statusData = await status.json();
+    const statusValue = statusData.status || statusData.state || '';
+
+    if (statusValue === 'COMPLETED') {
+      const result = await fetch('https://queue.fal.run/fal-ai/hunyuan-3d/v3.1/pro/image-to-3d/requests/' + taskId, {
+        headers: { 'Authorization': 'Key ' + falkey }
+      });
+      const resultData = await result.json();
       const url = resultData.model_glb?.url || resultData.output?.model_glb?.url || resultData.model_mesh?.url || resultData.output?.model_mesh?.url || resultData.model_glb_url || resultData.output?.model_glb_url || resultData.data?.model_glb_url;
       return res.json({ status: 'FINISHED', result_url: url });
     }
@@ -524,177 +477,20 @@ app.get('/api/download', requireSubscription, async (req, res) => {
 // Admin stats page
 app.get('/admin/stats', async (req, res) => {
   if ((req.query.key || process.env.ADMIN_KEY) !== process.env.ADMIN_KEY) return res.status(404).send('Not Found');
-  
   try {
     const now = Math.floor(Date.now() / 1000);
-    
-    // Total signups
     const signupsResult = await pool.query('SELECT COUNT(*) as count FROM users');
     const totalSignups = signupsResult.rows[0].count;
-    
-    // Active subscriptions
     const activeResult = await pool.query('SELECT COUNT(*) as count FROM users WHERE subscription_status = $1', ['active']);
     const activeSubscriptions = activeResult.rows[0].count;
-    
-    // Trial users (trial end in future)
     const trialResult = await pool.query('SELECT COUNT(*) as count FROM users WHERE trial_end > $1 AND subscription_status != $2', [now, 'active']);
     const trialUsers = trialResult.rows[0].count;
-    
-    // Cancelled subscriptions
     const cancelledResult = await pool.query('SELECT COUNT(*) as count FROM users WHERE subscription_status = $1', ['cancelled']);
     const cancelledSubscriptions = cancelledResult.rows[0].count;
-    
-    // Recent signups (last 10)
     const recentResult = await pool.query('SELECT email, created_at, subscription_status FROM users ORDER BY created_at DESC LIMIT 10');
     const recentSignups = recentResult.rows;
     
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-  <title>Frame to Form - Admin Stats</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
-      padding: 40px 20px;
-      margin: 0;
-    }
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-    h1 {
-      color: #64b5f6;
-      font-size: 32px;
-      margin-bottom: 30px;
-      text-align: center;
-    }
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 20px;
-      margin-bottom: 40px;
-    }
-    .stat-card {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 8px;
-      padding: 20px;
-      text-align: center;
-    }
-    .stat-label {
-      color: #94a3b8;
-      font-size: 14px;
-      margin-bottom: 10px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-    .stat-value {
-      color: #64b5f6;
-      font-size: 36px;
-      font-weight: bold;
-    }
-    .recent-signups {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 8px;
-      padding: 20px;
-    }
-    .recent-signups h2 {
-      color: #64b5f6;
-      margin-top: 0;
-      font-size: 18px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    th {
-      text-align: left;
-      padding: 12px;
-      border-bottom: 1px solid #334155;
-      color: #94a3b8;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-    td {
-      padding: 12px;
-      border-bottom: 1px solid #334155;
-    }
-    tr:last-child td {
-      border-bottom: none;
-    }
-    .status-active {
-      color: #4ade80;
-    }
-    .status-trialing {
-      color: #fbbf24;
-    }
-    .status-inactive {
-      color: #ef4444;
-    }
-    .status-cancelled {
-      color: #94a3b8;
-    }
-    .date {
-      color: #94a3b8;
-      font-size: 14px;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>🎬 Frame to Form – Admin Dashboard</h1>
-    
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label">Total Signups</div>
-        <div class="stat-value">${totalSignups}</div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="stat-label">Active Subscriptions</div>
-        <div class="stat-value">${activeSubscriptions}</div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="stat-label">Trial Users</div>
-        <div class="stat-value">${trialUsers}</div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="stat-label">Cancelled</div>
-        <div class="stat-value">${cancelledSubscriptions}</div>
-      </div>
-    </div>
-    
-    <div class="recent-signups">
-      <h2>Recent Signups (Last 10)</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Email</th>
-            <th>Signed Up</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${recentSignups.map(user => `
-            <tr>
-              <td>${user.email}</td>
-              <td class="date">${new Date(user.created_at * 1000).toLocaleDateString()} ${new Date(user.created_at * 1000).toLocaleTimeString()}</td>
-              <td class="status-${user.subscription_status}">${user.subscription_status.charAt(0).toUpperCase() + user.subscription_status.slice(1)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</body>
-</html>`;
-    
+    const html = `<!DOCTYPE html><html><head><title>Frame to Form - Admin Stats</title><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:40px 20px;margin:0}.container{max-width:1200px;margin:0 auto}h1{color:#64b5f6;font-size:32px;margin-bottom:30px;text-align:center}.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;margin-bottom:40px}.stat-card{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:20px;text-align:center}.stat-label{color:#94a3b8;font-size:14px;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px}.stat-value{color:#64b5f6;font-size:36px;font-weight:bold}.recent-signups{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:20px}.recent-signups h2{color:#64b5f6;margin-top:0;font-size:18px}table{width:100%;border-collapse:collapse}th{text-align:left;padding:12px;border-bottom:1px solid #334155;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:1px}td{padding:12px;border-bottom:1px solid #334155}tr:last-child td{border-bottom:none}.status-active{color:#4ade80}.status-trialing{color:#fbbf24}.status-inactive{color:#ef4444}.status-cancelled{color:#94a3b8}.date{color:#94a3b8;font-size:14px}</style></head><body><div class="container"><h1>🎬 Frame to Form – Admin Dashboard</h1><div class="stats-grid"><div class="stat-card"><div class="stat-label">Total Signups</div><div class="stat-value">${totalSignups}</div></div><div class="stat-card"><div class="stat-label">Active Subscriptions</div><div class="stat-value">${activeSubscriptions}</div></div><div class="stat-card"><div class="stat-label">Trial Users</div><div class="stat-value">${trialUsers}</div></div><div class="stat-card"><div class="stat-label">Cancelled</div><div class="stat-value">${cancelledSubscriptions}</div></div></div><div class="recent-signups"><h2>Recent Signups (Last 10)</h2><table><thead><tr><th>Email</th><th>Signed Up</th><th>Status</th></tr></thead><tbody>${recentSignups.map(user => `<tr><td>${user.email}</td><td class="date">${new Date(user.created_at * 1000).toLocaleDateString()} ${new Date(user.created_at * 1000).toLocaleTimeString()}</td><td class="status-${user.subscription_status}">${user.subscription_status.charAt(0).toUpperCase() + user.subscription_status.slice(1)}</td></tr>`).join('')}</tbody></table></div></div></body></html>`;
     res.send(html);
   } catch (err) {
     console.error('Stats error:', err);
