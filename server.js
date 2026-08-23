@@ -474,6 +474,36 @@ app.post('/api/trellis/submit', requireSubscription, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Hunyuan poll
+app.get('/api/hunyuan/status/:taskId', requireSubscription, async (req, res) => {
+  try {
+    const falkey = req.headers['x-fal-key'];
+    if (!falkey) return res.status(400).json({ error: 'Missing fal.ai key' });
+    const taskId = req.params.taskId;
+
+    const status = await fetch('https://queue.fal.run/fal-ai/hunyuan-3d/v3.1/pro/image-to-3d/requests/' + taskId + '/status', {
+      headers: { 'Authorization': 'Key ' + falkey }
+    });
+    const statusData = await status.json();
+    const statusValue = statusData.status || statusData.state || '';
+
+    if (statusValue === 'COMPLETED') {
+      const result = await fetch('https://queue.fal.run/fal-ai/hunyuan-3d/v3.1/pro/image-to-3d/requests/' + taskId, {
+        headers: { 'Authorization': 'Key ' + falkey }
+      });
+      const resultData = await result.json();
+      const url = resultData.model_glb?.url || resultData.output?.model_glb?.url || resultData.model_mesh?.url || resultData.output?.model_mesh?.url || resultData.output?.model_glb_url || resultData.output?.model_gltf_url || resultData.data?.model_glb_url;
+      return res.json({ status: 'FINISHED', result_url: url });
+    }
+    if (statusValue === 'FAILED' || statusValue === 'ERROR') {
+      return res.json({ status: 'FAILED', error: statusData.error || 'Failed' });
+    }
+    return res.json({ status: 'PROCESSING' });
+  } catch (e) { 
+    return res.status(500).json({ error: e.message }); 
+  }
+});
+
 // Trellis poll
 app.get('/api/trellis/status/:taskId', requireSubscription, async (req, res) => {
   try {
