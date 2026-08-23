@@ -433,7 +433,7 @@ app.post('/api/hunyuan/submit', requireSubscription, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Hunyuan poll (FIXED)
+// Hunyuan poll (NEW)
 app.get('/api/hunyuan/status/:taskId', requireSubscription, async (req, res) => {
   try {
     const falkey = req.headers['x-fal-key'];
@@ -451,46 +451,53 @@ app.get('/api/hunyuan/status/:taskId', requireSubscription, async (req, res) => 
         headers: { 'Authorization': 'Key ' + falkey }
       });
       const resultData = await result.json();
-      const url = resultData.model_glb?.url || resultData.output?.model_glb?.url || resultData.model_mesh?.url || resultData.output?.model_mesh?.url || resultData.output?.model_glb_url || resultData.output?.model_gltf_url || resultData.data?.model_glb_url;
+      const url = resultData.model_glb?.url || resultData.output?.model_glb?.url || resultData.model_mesh?.url || resultData.output?.model_mesh?.url || resultData.model_glb_url || resultData.output?.model_glb_url || resultData.data?.model_glb_url;
       return res.json({ status: 'FINISHED', result_url: url });
     }
-    if (statusValue === 'FAILED' || statusValue === 'ERROR') {
-      return res.json({ status: 'FAILED', error: statusData.error || 'Failed' });
-    }
-    // For PENDING, PROCESSING, or any other status - ALWAYS return a response
-    return res.json({ status: 'PROCESSING' });
-  } catch (e) { 
-    return res.status(500).json({ error: e.message }); 
+    if (statusValue === 'FAILED' || statusValue === 'ERROR') return res.json({ status: 'FAILED', error: statusData.error || 'Failed' });
+    res.json({ status: 'PROCESSING' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Download proxy
+app.get('/api/download', requireSubscription, async (req, res) => {
+  try {
+    const url = req.query.url;
+    const filename = req.query.filename;
+    if (!url) return res.status(400).json({ error: 'No URL' });
+    const r = await fetch(url);
+    if (!r.ok) return res.status(r.status).json({ error: 'Download failed: ' + r.status });
+    const buf = await r.buffer();
+    res.set('Content-Disposition', 'attachment; filename=' + (filename || 'model.glb') + '');
+    res.set('Content-Type', 'application/octet-stream');
+    res.send(buf);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Admin stats page
+app.get('/admin/stats', async (req, res) => {
+  if ((req.query.key || process.env.ADMIN_KEY) !== process.env.ADMIN_KEY) return res.status(404).send('Not Found');
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const signupsResult = await pool.query('SELECT COUNT(*) as count FROM users');
+    const totalSignups = signupsResult.rows[0].count;
+    const activeResult = await pool.query('SELECT COUNT(*) as count FROM users WHERE subscription_status = $1', ['active']);
+    const activeSubscriptions = activeResult.rows[0].count;
+    const trialResult = await pool.query('SELECT COUNT(*) as count FROM users WHERE trial_end > $1 AND subscription_status != $2', [now, 'active']);
+    const trialUsers = trialResult.rows[0].count;
+    const cancelledResult = await pool.query('SELECT COUNT(*) as count FROM users WHERE subscription_status = $1', ['cancelled']);
+    const cancelledSubscriptions = cancelledResult.rows[0].count;
+    const recentResult = await pool.query('SELECT email, created_at, subscription_status FROM users ORDER BY created_at DESC LIMIT 10');
+    const recentSignups = recentResult.rows;
+    
+    const html = `<!DOCTYPE html><html><head><title>Frame to Form - Admin Stats</title><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:40px 20px;margin:0}.container{max-width:1200px;margin:0 auto}h1{color:#64b5f6;font-size:32px;margin-bottom:30px;text-align:center}.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;margin-bottom:40px}.stat-card{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:20px;text-align:center}.stat-label{color:#94a3b8;font-size:14px;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px}.stat-value{color:#64b5f6;font-size:36px;font-weight:bold}.recent-signups{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:20px}.recent-signups h2{color:#64b5f6;margin-top:0;font-size:18px}table{width:100%;border-collapse:collapse}th{text-align:left;padding:12px;border-bottom:1px solid #334155;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:1px}td{padding:12px;border-bottom:1px solid #334155}tr:last-child td{border-bottom:none}.status-active{color:#4ade80}.status-trialing{color:#fbbf24}.status-inactive{color:#ef4444}.status-cancelled{color:#94a3b8}.date{color:#94a3b8;font-size:14px}</style></head><body><div class="container"><h1>🎬 Frame to Form – Admin Dashboard</h1><div class="stats-grid"><div class="stat-card"><div class="stat-label">Total Signups</div><div class="stat-value">${totalSignups}</div></div><div class="stat-card"><div class="stat-label">Active Subscriptions</div><div class="stat-value">${activeSubscriptions}</div></div><div class="stat-card"><div class="stat-label">Trial Users</div><div class="stat-value">${trialUsers}</div></div><div class="stat-card"><div class="stat-label">Cancelled</div><div class="stat-value">${cancelledSubscriptions}</div></div></div><div class="recent-signups"><h2>Recent Signups (Last 10)</h2><table><thead><tr><th>Email</th><th>Signed Up</th><th>Status</th></tr></thead><tbody>${recentSignups.map(user => `<tr><td>${user.email}</td><td class="date">${new Date(user.created_at * 1000).toLocaleDateString()} ${new Date(user.created_at * 1000).toLocaleTimeString()}</td><td class="status-${user.subscription_status}">${user.subscription_status.charAt(0).toUpperCase() + user.subscription_status.slice(1)}</td></tr>`).join('')}</tbody></table></div></div></body></html>`;
+    res.send(html);
+  } catch (err) {
+    console.error('Stats error:', err);
+    res.status(500).send('Error loading stats');
   }
 });
 
-// Trellis poll (FIXED - same pattern)
-app.get('/api/trellis/status/:taskId', requireSubscription, async (req, res) => {
-  try {
-    const falkey = req.headers['x-fal-key'];
-    if (!falkey) return res.status(400).json({ error: 'Missing fal.ai key' });
-    const taskId = req.params.taskId;
-
-    const status = await fetch('https://queue.fal.run/fal-ai/trellis/requests/' + taskId + '/status', {
-      headers: { 'Authorization': 'Key ' + falkey }
-    });
-    const statusData = await status.json();
-    const statusValue = statusData.status || '';
-
-    if (statusValue === 'COMPLETED') {
-      const result = await fetch('https://queue.fal.run/fal-ai/trellis/requests/' + taskId, {
-        headers: { 'Authorization': 'Key ' + falkey }
-      });
-      const resultData = await result.json();
-      const url = resultData.model_glb?.url || resultData.output?.model_glb?.url || resultData.data?.glb?.url;
-      return res.json({ status: 'FINISHED', result_url: url });
-    }
-    if (statusValue === 'FAILED') {
-      return res.json({ status: 'FAILED', error: statusData.error || 'Failed' });
-    }
-    // For PENDING, PROCESSING, or any other status - ALWAYS return a response
-    return res.json({ status: 'PROCESSING' });
-  } catch (e) { 
-    return res.status(500).json({ error: e.message }); 
-  }
+app.listen(PORT, () => {
+  console.log(`\n FRAME TO FORM | Running | http://localhost:${PORT} \n`);
 });
