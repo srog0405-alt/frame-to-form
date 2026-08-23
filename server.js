@@ -492,3 +492,7 @@ app.post('/api/hunyuan/submit', requireSubscription, async (req, res) => {
     return res.status(500).json({ error: e.message });
   }
 });
+
+app.listen(PORT, () => {
+  console.log(`\n FRAME TO FORM | Running | http://localhost:${PORT} \n`);
+});
