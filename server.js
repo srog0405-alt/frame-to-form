@@ -489,7 +489,7 @@ app.post('/api/hunyuan/submit', requireSubscription, async (req, res) => {
       body: JSON.stringify({ image_url })
     });
     const data = await result.json();
-    res.json({ task_id: data.request_id || data.id });
+    return res.json({ task_id: data.request_id || data.id });
   } catch (e) { 
     res.status(500).json({ error: e.message }); 
   }
