@@ -617,6 +617,7 @@
 
     // ---------- STEP 4: CONVERT BATCH TO 3D ----------
     function convertSelectedTo3D() {
+      var engineType = document.getElementById('subjectType').value === 'people' ? 'hunyuan' : 'trellis';
       if (!falKey()) { setStatus('convertStatus', 'Add your fal.ai key at the top of the page first.', 'error'); return; }
       if (selectedIndices.size === 0) { setStatus('convertStatus', 'No images selected.', 'error'); return; }
 
@@ -644,7 +645,7 @@
         item.innerHTML = '<div class="label">Image ' + (index + 1) + '</div><div class="status-badge processing">Submitting...</div>';
         resultsList.appendChild(item);
 
-        fetch('/api/trellis/submit', {
+        fetch('/api/' + engineType + '/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-fal-key': falKey() },
           body: JSON.stringify(body)
@@ -679,7 +680,7 @@
         return;
       }
       setTimeout(function() {
-        fetch('/api/trellis/status/' + conversions[index].taskId, { headers: { 'x-fal-key': falKey() } })
+        fetch('/api/' + engineType + '/status/' + conversions[index].taskId, { headers: { 'x-fal-key': falKey() } })
           .then(function(r) { return r.json(); })
           .then(function(data) {
             var item = document.getElementById('result-' + index);
