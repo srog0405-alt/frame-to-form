@@ -369,7 +369,7 @@ app.post('/api/generate-image', requireSubscription, async (req, res) => {
     const fullPrompt = subjectType === 'people'
       ? prompt + '. full body shot, entire figure visible head to toe, legs and feet fully visible, standing on ground, do crop, wide shot'
       : prompt;
-    const imageSizes = [832, 896];
+    const imageSizes = ['square_hd', 'square'];
     const seed = seeds[index % seeds.length];
     const imageSize = imageSizes[index % imageSizes.length];
 
