@@ -667,6 +667,40 @@ app.get('/admin/stats', async (req, res) => {
   }
 });
 
+// Hunyuan submit
+app.post('/api/hunyuan/submit', requireSubscription, async (req, res) => {
+  try {
+    const falkey = req.headers['x-fal-key'];
+    if (!falkey) return res.status(400).json({ error: 'Missing fal.ai key' });
+    const { image_url } = req.body;
+    if (!image_url) return res.status(400).json({ error: 'Missing image_url' });
+    const result = await fetch('https://queue.fal.run/fal-ai/hunyuan-3d/v3.1/pro/image-to-3d', {
+      method: 'POST',
+      headers: { 'Authorization': 'Key ' + falkey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_url })
+    });
+    const data = await result.json();
+    return res.json({ task_id: data.request_id || data.id });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/hunyuan/status/:taskId', requireSubscription, async (req, res) => {
+  try {
+    const falkey = req.headers['x-fal-key'];
+    if (!falkey) return res.status(400).json({ error: 'Missing fal.ai key' });
+    const { taskId } = req.params;
+    if (!taskId) return res.status(400).json({ error: 'Missing taskId' });
+    const statusReq = await fetch('https://queue.fal.run/' + taskId, { method: 'GET', headers: { 'Authorization': 'Key ' + falkey } });
+    if (!statusReq.ok) { const err = await statusReq.json(); return res.status(statusReq.status).json({ error: err.message || 'Status check failed' }); }
+    const data = await statusReq.json();
+    res.json({ status: data.status, result_url: data.result ? data.result.model_mesh_gltf_url : null });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`\n FRAME TO FORM | Running | http://localhost:${PORT} \n`);
 });
