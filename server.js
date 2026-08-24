@@ -1,7 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
-const PgSession = require('connect-pg-simple')(session);
 const multer = require('multer');
 const fetch = require('node-fetch');
 const FormData = require('form-data');
@@ -16,9 +15,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const resend = new Resend(process.env.RESEND_API_KEY);
-
-// Trust Railway's proxy so req.protocol reports https correctly
-app.set('trust proxy', 1);
 
 // POSTGRES DATABASE CONNECTION
 const pool = new Pool({
@@ -61,26 +57,17 @@ async function initializeDatabase() {
 initializeDatabase();
 
 // MIDDLEWARE
-const jsonParser = express.json({ limit: '50mb' });
-app.use((req, res, next) => {
-  if (req.originalUrl === '/api/webhook') return next();
-  jsonParser(req, res, next);
-});
+app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
-  store: new PgSession({ pool: pool, createTableIfMissing: true }),
   secret: process.env.SESSION_SECRET || 'ftf-secret-change-me',
   resave: false,
   saveUninitialized: false,
-  proxy: true,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 30 * 24 * 60 * 60 * 1000
-  }
+  cookie: { secure: false, maxAge: 7 * 24 * 60 * 60 * 1000 }
 }));
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { filesize: 50 * 1024 * 1024 } });
 
 // AUTH MIDDLEWARE
 function requireAuth(req, res, next) {
@@ -88,26 +75,16 @@ function requireAuth(req, res, next) {
   next();
 }
 
-async function requireSubscription(req, res, next) {
+function requireSubscription(req, res, next) {
   if (!req.session.userId) return res.redirect('/login');
-  try {
-    const result = await pool.query('SELECT subscription_status, trial_end FROM users WHERE id = $1', [req.session.userId]);
-    if (result.rows.length === 0) return res.redirect('/login');
-    const u = result.rows[0];
-    const now = Math.floor(Date.now() / 1000);
-    const isActive = u.subscription_status === 'active';
-    const trialValid = u.trial_end && u.trial_end > now;
-    if (!isActive && !trialValid) return res.redirect('/subscribe');
-    req.user = {
-      id: req.session.userId,
-      subscription_status: u.subscription_status,
-      trial_end: u.trial_end
-    };
-    next();
-  } catch (err) {
-    console.error('Subscription check error:', err);
-    return res.redirect('/login');
-  }
+  const now = Math.floor(Date.now() / 1000);
+  if (!req.session.subscription_status && req.session.trial_end < now) return res.redirect('/subscribe');
+  req.user = {
+    id: req.session.userId,
+    subscription_status: req.session.subscription_status,
+    trial_end: req.session.trial_end
+  };
+  next();
 }
 
 // PAGES
@@ -282,15 +259,16 @@ app.post('/api/create-checkout', requireAuth, async (req, res) => {
     const user = await pool.query('SELECT * FROM users WHERE id = $1', [req.session.userId]);
     if (user.rows.length === 0) return res.status(404).json({ error: 'User not found' });
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-
     const session = await stripe.checkout.sessions.create({
       customer: user.rows[0].stripe_customer_id,
       payment_method_types: ['card'],
       line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
       mode: 'subscription',
-      success_url: `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/subscribe`
+      success_url: `${req.get('host')}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${req.get('host')}/subscribe`,
+      subscription_data: {
+        trial_period_days: 14
+      }
     });
 
     res.json({ url: session.url });
@@ -306,11 +284,7 @@ app.get('/api/user', requireAuth, async (req, res) => {
     if (user.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const now = Math.floor(Date.now() / 1000);
     const daysLeft = user.rows[0].trial_end ? Math.ceil((user.rows[0].trial_end - now) / 86400) : 0;
-    res.json({
-      subscription_status: user.rows[0].subscription_status,
-      trial_end: user.rows[0].trial_end,
-      trial_days_left: daysLeft
-    });
+    res.json({ ...user.rows[0], user, trial_days_left: daysLeft });
   } catch (err) {
     console.error('User fetch error:', err);
     res.status(500).json({ error: 'Something went wrong. Please try again.' });
@@ -323,7 +297,7 @@ app.post('/api/customer-portal', requireAuth, async (req, res) => {
     if (user.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: user.rows[0].stripe_customer_id,
-      return_url: `${req.protocol}://${req.get('host')}/account`
+      return_url: `${req.get('host')}/account`
     });
     res.json({ url: portalSession.url });
   } catch (err) {
@@ -348,7 +322,7 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, 
     case 'customer.subscription.updated':
     case 'customer.subscription.created': {
       const sub = event.data.object;
-      await pool.query('UPDATE users SET subscription_status = $1, subscription_id = $2 WHERE stripe_customer_id = $3', [sub.status, sub.id, sub.customer]);
+      await pool.query('UPDATE users SET subscription_status = $1, subscription_id = $2 WHERE stripe_customer_id = $3', ['active', sub.id, sub.customer]);
       break;
     }
     case 'customer.subscription.deleted': {
@@ -393,7 +367,7 @@ app.post('/api/generate-image', requireSubscription, async (req, res) => {
     const { prompt, index, subjectType } = req.body;
     const seeds = [42, 154, 286, 512, 999, 1337, 2048, 7777, 33337, 65535];
     const fullPrompt = subjectType === 'people'
-      ? prompt + '. full body shot, entire figure visible head to toe, legs and feet fully visible, standing on ground, no crop, wide shot'
+      ? prompt + '. full body shot, entire figure visible head to toe, legs and feet fully visible, standing on ground, do crop, wide shot'
       : prompt;
     const imageSizes = [832, 896];
     const seed = seeds[index % seeds.length];
@@ -402,26 +376,22 @@ app.post('/api/generate-image', requireSubscription, async (req, res) => {
     const r = await fetch('https://fal.run/fal-ai/flux-2-pro', {
       method: 'POST',
       headers: { 'Authorization': 'Key ' + falkey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: fullPrompt, image_size: { width: imageSize, height: imageSize }, seed })
+      body: JSON.stringify({ prompt: fullPrompt, image_size: imageSize, seed, enable_safety_checker: false })
     });
 
     if (!r.ok) {
-      let err = {};
-      try { err = await r.json(); } catch (parseErr) {}
+      const err = await r.json();
       let detail = err.message || err.detail || 'Flux API error';
-      if (Array.isArray(detail)) detail = detail.map(function(d) { return d.msg || JSON.stringify(d); }).join('; ');
-      else if (typeof detail === 'object') detail = JSON.stringify(detail);
       return res.status(r.status).json({ error: detail });
     }
 
     const data = await r.json();
     if (!data.images || data.images[0] === undefined) {
-      let detail = 'No image returned from Flux';
-      if (data.detail) {
+      if (data.detail && data.detail.map) {
         detail = Array.isArray(data.detail) ? data.detail.map(d => d.msg).join(', ') : data.detail;
       }
       console.error('Flux API error [' + r.status + ']:', JSON.stringify(data));
-      return res.status(500).json({ error: 'Flux - ' + detail });
+      return res.status(r.status).json({ error: 'Flux ' + r.status + ' - ' + detail });
     }
 
     const imageUrl = data.images[0].url;
@@ -443,6 +413,7 @@ app.post('/api/trellis/submit', requireSubscription, async (req, res) => {
     if (!finalUrl) {
       const imageBase64 = image_base64.match(/data:[^;]*;base64,(.+)/)?.[1];
       const buffer = Buffer.from(imageBase64, 'base64');
+      const base64str = buffer.toString('base64');
       const filename = 'figure_' + Date.now() + '.png';
       const initData = await fetch('https://rest.alpha.fal.ai/storage/upload/initiate?storage_type=fal-cdn-v3', {
         method: 'POST',
@@ -474,22 +445,225 @@ app.post('/api/trellis/submit', requireSubscription, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Hunyuan submit
-app.post('/api/hunyuan/submit', requireSubscription, async (req, res) => {
+// Trellis poll
+app.get('/api/trellis/status/:taskId', requireSubscription, async (req, res) => {
   try {
     const falkey = req.headers['x-fal-key'];
     if (!falkey) return res.status(400).json({ error: 'Missing fal.ai key' });
-    const { image_url } = req.body;
-    if (!image_url) return res.status(400).json({ error: 'Missing image_url' });
-    const result = await fetch('https://queue.fal.run/fal-ai/hunyuan-3d/v3.1/pro/image-to-3d', {
-      method: 'POST',
-      headers: { 'Authorization': 'Key ' + falkey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image_url })
+    const taskId = req.params.taskId;
+
+    const status = await fetch('https://queue.fal.run/fal-ai/trellis-2/requests/' + taskId + '/status', {
+      headers: { 'Authorization': 'Key ' + falkey }
     });
-    const data = await result.json();
-    return res.json({ task_id: data.request_id || data.id });
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
+    const statusData = await status.json();
+    const statusValue = statusData.state || '';
+
+    if (statusValue === 'COMPLETED') {
+      const result = await fetch('https://queue.fal.run/fal-ai/trellis-2/requests/' + taskId, {
+        headers: { 'Authorization': 'Key ' + falkey }
+      });
+      const resultData = await result.json();
+      const url = resultData.model_glb_url || resultData.output?.model_glb_url || resultData.data?.model_glb_url;
+      return res.json({ status: 'FINISHED', result_url: url });
+    }
+    if (statusValue === 'FAILED' || statusValue === 'ERROR') return res.json({ status: 'FAILED', error: statusData.error || 'Failed' });
+    res.json({ status: 'PROCESSING' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Download proxy
+app.get('/api/download', requireSubscription, async (req, res) => {
+  try {
+    const url = req.query.url;
+    const filename = req.query.filename;
+    if (!url) return res.status(400).json({ error: 'No URL' });
+    const r = await fetch(url);
+    if (!r.ok) return res.status(r.status).json({ error: 'Download failed: ' + r.status });
+    const buf = await r.buffer();
+    res.set('Content-Disposition', 'attachment; filename=' + (filename || 'model.glb') + '');
+    res.set('Content-Type', 'application/octet-stream');
+    res.send(buf);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Admin stats page
+app.get('/admin/stats', async (req, res) => {
+  if ((req.query.key || process.env.ADMIN_KEY) !== process.env.ADMIN_KEY) return res.status(404).send('Not Found');
+  
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    
+    // Total signups
+    const signupsResult = await pool.query('SELECT COUNT(*) as count FROM users');
+    const totalSignups = signupsResult.rows[0].count;
+    
+    // Active subscriptions
+    const activeResult = await pool.query('SELECT COUNT(*) as count FROM users WHERE subscription_status = $1', ['active']);
+    const activeSubscriptions = activeResult.rows[0].count;
+    
+    // Trial users (trial end in future)
+    const trialResult = await pool.query('SELECT COUNT(*) as count FROM users WHERE trial_end > $1 AND subscription_status != $2', [now, 'active']);
+    const trialUsers = trialResult.rows[0].count;
+    
+    // Cancelled subscriptions
+    const cancelledResult = await pool.query('SELECT COUNT(*) as count FROM users WHERE subscription_status = $1', ['cancelled']);
+    const cancelledSubscriptions = cancelledResult.rows[0].count;
+    
+    // Recent signups (last 10)
+    const recentResult = await pool.query('SELECT email, created_at, subscription_status FROM users ORDER BY created_at DESC LIMIT 10');
+    const recentSignups = recentResult.rows;
+    
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Frame to Form - Admin Stats</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 40px 20px;
+      margin: 0;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #64b5f6;
+      font-size: 32px;
+      margin-bottom: 30px;
+      text-align: center;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+    .stat-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+    }
+    .stat-label {
+      color: #94a3b8;
+      font-size: 14px;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .stat-value {
+      color: #64b5f6;
+      font-size: 36px;
+      font-weight: bold;
+    }
+    .recent-signups {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .recent-signups h2 {
+      color: #64b5f6;
+      margin-top: 0;
+      font-size: 18px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th {
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid #334155;
+      color: #94a3b8;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    td {
+      padding: 12px;
+      border-bottom: 1px solid #334155;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    .status-active {
+      color: #4ade80;
+    }
+    .status-trialing {
+      color: #fbbf24;
+    }
+    .status-inactive {
+      color: #ef4444;
+    }
+    .status-cancelled {
+      color: #94a3b8;
+    }
+    .date {
+      color: #94a3b8;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📊 Frame to Form — Admin Dashboard</h1>
+    
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Signups</div>
+        <div class="stat-value">${totalSignups}</div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-label">Active Subscriptions</div>
+        <div class="stat-value">${activeSubscriptions}</div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-label">Trial Users</div>
+        <div class="stat-value">${trialUsers}</div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-label">Cancelled</div>
+        <div class="stat-value">${cancelledSubscriptions}</div>
+      </div>
+    </div>
+    
+    <div class="recent-signups">
+      <h2>Recent Signups (Last 10)</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Signed Up</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${recentSignups.map(user => `
+            <tr>
+              <td>${user.email}</td>
+              <td class="date">${new Date(user.created_at * 1000).toLocaleDateString()} ${new Date(user.created_at * 1000).toLocaleTimeString()}</td>
+              <td class="status-${user.subscription_status}">${user.subscription_status.charAt(0).toUpperCase() + user.subscription_status.slice(1)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>`;
+    
+    res.send(html);
+  } catch (err) {
+    console.error('Stats error:', err);
+    res.status(500).send('Error loading stats');
   }
 });
 
