@@ -692,7 +692,7 @@ app.get('/api/hunyuan/status/:taskId', requireSubscription, async (req, res) => 
     if (!falkey) return res.status(400).json({ error: 'Missing fal.ai key' });
     const { taskId } = req.params;
     if (!taskId) return res.status(400).json({ error: 'Missing taskId' });
-    const statusReq = await fetch('https://queue.fal.run/' + taskId, { method: 'GET', headers: { 'Authorization': 'Key ' + falkey } });
+    const statusReq = await fetch('https://queue.fal.run/fal-ai/hunyuan-3d/v3.1/pro/image-to-3d/requests/' + taskId + '/status', { method: 'GET', headers: { 'Authorization': 'Key ' + falkey } });
     if (!statusReq.ok) { const err = await statusReq.json(); return res.status(statusReq.status).json({ error: err.message || 'Status check failed' }); }
     const data = await statusReq.json();
     res.json({ status: data.status, result_url: data.result ? data.result.model_mesh_gltf_url : null });
