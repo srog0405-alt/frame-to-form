@@ -456,7 +456,7 @@ app.get('/api/trellis/status/:taskId', requireSubscription, async (req, res) => 
       headers: { 'Authorization': 'Key ' + falkey }
     });
     const statusData = await status.json();
-    const statusValue = statusData.state || '';
+    const statusValue = statusData.status || '';
 
     if (statusValue === 'COMPLETED') {
       const result = await fetch('https://queue.fal.run/fal-ai/trellis-2/requests/' + taskId, {
