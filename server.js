@@ -463,7 +463,7 @@ app.get('/api/trellis/status/:taskId', requireSubscription, async (req, res) => 
         headers: { 'Authorization': 'Key ' + falkey }
       });
       const resultData = await result.json();
-      const url = resultData.model_glb_url || resultData.output?.model_glb_url || resultData.data?.model_glb_url;
+      const url = resultData.model_glb?.url;
       return res.json({ status: 'FINISHED', result_url: url });
     }
     if (statusValue === 'FAILED' || statusValue === 'ERROR') return res.json({ status: 'FAILED', error: statusData.error || 'Failed' });
