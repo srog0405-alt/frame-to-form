@@ -20,7 +20,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
+})
 
 // Initialize database schema
 async function initializeDatabase() {
