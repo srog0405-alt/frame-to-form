@@ -1,4 +1,4 @@
-{
+{"type": "module",
   "name": "frame-to-form-web",
   "version": "1.0.0",
   "description": "Frame to Form - Photo to 3D pipeline for production designers",
@@ -8,6 +8,7 @@
     "dev": "node server.js"
   },
   "dependencies": {
+    "@fal-ai/client": "^1.10.1",
     "bcryptjs": "^2.4.3",
     "connect-pg-simple": "^10.0.0",
     "dotenv": "^16.4.5",
