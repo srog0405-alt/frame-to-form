@@ -118,7 +118,7 @@ app.post('/api/convert-3d', async (req, res) => {
 
     let glbUrl = null;
     if (model.includes('hunyuan')) {
-      glbUrl = result.data?.glb?.url;
+      glbUrl = result.data?.model_glb?.url || result.data?.glb?.url;
     } else {
       glbUrl = result.data?.model_glb?.url;
     }
