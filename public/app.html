@@ -210,7 +210,7 @@
       if (!falKey()) { setStatus('genStatus', 'Add your fal.ai key at the top of the page first.', 'error'); return; }
       if (!prompt) { setStatus('genStatus', 'Type a description of the asset you want.', 'error'); return; }
       var count = parseInt(document.getElementById('numImages').value, 10);
-      var subjectType = document.getElementById('subjectType').value;
+      var subjectType = document.getElementById('subjectType').value; if (subjectType === 'people') { prompt = prompt + ', full length figure, head to toe, plain background'; }
       var gallery = document.getElementById('gallery');
       gallery.innerHTML = '';
       document.getElementById('gallerySection').classList.remove('hidden');
@@ -357,7 +357,7 @@
       });
     }
     function convertSelectedTo3D() {
-      var engineType = document.getElementById('subjectType').value === 'people' ? 'hunyuan' : 'trellis';
+      var engineType = document.getElementById('subjectType').value === 'people' ? 'trellis' : 'trellis';
       if (!falKey()) { setStatus('convertStatus', 'Add your fal.ai key at the top of the page first.', 'error'); return; }
       if (selectedIndices.size === 0) { setStatus('convertStatus', 'No images selected.', 'error'); return; }
       document.getElementById('convertBtn').disabled = true;
